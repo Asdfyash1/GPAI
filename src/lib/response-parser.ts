@@ -18,14 +18,7 @@ function extractSection(markdown: string, heading: string): string {
 function extractBullets(section: string): string[] {
   return section
     .split("\n")
-    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
-    .filter((line) => line.length > 0 && !line.startsWith("#"));
-}
-
-function extractNumberedItems(section: string): string[] {
-  return section
-    .split("\n")
-    .map((line) => line.replace(/^\d+[.)]\s*/, "").trim())
+    .map((line) => line.replace(/^[-*•]\s*/, "").replace(/^\d+[.)]\s*/, "").trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
 }
 
@@ -66,26 +59,50 @@ function parseSteps(markdown: string): SolutionStep[] {
 }
 
 function parseQAItems(section: string): PracticeItem[] {
+  if (!section.trim()) return [];
   const items: PracticeItem[] = [];
 
-  const qaPattern =
-    /(?:^|\n)\d*[.)]*\s*\**(?:Q(?:uestion)?[:.]?\s*)?\**\s*(.+?)(?:\n\s*\**(?:A(?:nswer)?[:.]?\s*)\**\s*(.+?))?(?=\n\d+[.)]\s|\n\n|$)/gi;
-  let match;
+  const lines = section.split("\n").filter((l) => l.trim().length > 0);
 
-  while ((match = qaPattern.exec(section)) !== null) {
-    const question = match[1]?.trim();
-    const answer = match[2]?.trim() || "Think about this and check your work.";
-    if (question && question.length > 5) {
-      items.push({ question, answer });
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+      .replace(/^\d+[.)]\s*/, "")
+      .replace(/^[-*•]\s*/, "")
+      .replace(/^\*\*Q(?:uestion)?[:.]?\*\*\s*/i, "")
+      .trim();
+
+    if (line.length <= 5) continue;
+
+    const nextLine = lines[i + 1] || "";
+    const isAnswer = /^\s*\*\*A(?:nswer)?[:.]?\*\*/i.test(nextLine) ||
+      /^\s*A(?:nswer)?[:.]?\s/i.test(nextLine);
+
+    if (isAnswer) {
+      items.push({
+        question: line,
+        answer: nextLine
+          .replace(/^\s*\*\*A(?:nswer)?[:.]?\*\*\s*/i, "")
+          .replace(/^\s*A(?:nswer)?[:.]?\s*/i, "")
+          .trim(),
+      });
+      i++;
+    } else if (line.includes("?") || /^\d/.test(lines[i])) {
+      items.push({
+        question: line,
+        answer: "Work through this problem step by step.",
+      });
     }
   }
 
   if (items.length === 0) {
-    const lines = extractNumberedItems(section);
     for (const line of lines) {
-      if (line.length > 5) {
+      const cleaned = line
+        .replace(/^\d+[.)]\s*/, "")
+        .replace(/^[-*•]\s*/, "")
+        .trim();
+      if (cleaned.length > 5) {
         items.push({
-          question: line,
+          question: cleaned,
           answer: "Work through this problem step by step.",
         });
       }
@@ -113,6 +130,10 @@ function extractAnswer(markdown: string): string {
     const firstLine = answerSection.split("\n")[0].trim();
     if (firstLine) return firstLine;
   }
+
+  const directMatch = /##\s*(?:Direct\s+)?Answer[^#\n]*\n\s*(.+)/i.exec(markdown);
+  if (directMatch) return directMatch[1].trim();
+
   return "";
 }
 
@@ -131,16 +152,13 @@ export function parseModelResponse(
     extractSection(markdown, "Key concepts") ||
     extractSection(markdown, "Key Concepts") ||
     extractSection(markdown, "Concepts");
-  const keyConcepts =
-    extractBullets(conceptsSection).length > 0
-      ? extractBullets(conceptsSection)
-      : extractNumberedItems(conceptsSection);
+  const keyConcepts = extractBullets(conceptsSection);
 
   const mistakesSection =
     extractSection(markdown, "Revised mistakes") ||
     extractSection(markdown, "Common mistakes") ||
     extractSection(markdown, "Mistakes") ||
-    extractSection(markdown, "Common Mistakes AI");
+    extractSection(markdown, "Common Mistakes");
   const commonMistakes = extractBullets(mistakesSection);
 
   const checksSection =

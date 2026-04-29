@@ -3,12 +3,13 @@ import { generateText } from "ai";
 import type { EducationRequest, VerificationSignal } from "@/types/education";
 import { buildDemoResponse } from "@/lib/demo-solver";
 import { parseModelResponse } from "@/lib/response-parser";
-import { buildTaskPrompt, buildVerifierPrompt, textbookSystemPrompt } from "@/lib/prompts";
+import { buildTaskPrompt, buildVerifierPrompt, getSystemPrompt } from "@/lib/prompts";
 
 const nvidiaBaseUrl = "https://integrate.api.nvidia.com/v1";
+const REQUEST_TIMEOUT_MS = 90_000;
 
 const nvidiaModelRoutes = {
-  auto: process.env.NVIDIA_SOLVER_MODEL ?? "mistralai/mistral-large-3-675b-instruct-2512",
+  auto: process.env.NVIDIA_SOLVER_MODEL ?? "meta/llama-3.3-70b-instruct",
   "mistral-large": "mistralai/mistral-large-3-675b-instruct-2512",
   nemotron: "nvidia/llama-3.3-nemotron-super-49b-v1",
   "deepseek-flash": "deepseek-ai/deepseek-v4-flash",
@@ -32,9 +33,7 @@ function configuredProviders() {
       baseURL: process.env.NVIDIA_BASE_URL ?? nvidiaBaseUrl,
       solverModel: process.env.NVIDIA_SOLVER_MODEL ?? nvidiaModelRoutes.auto,
       verifierModel:
-        process.env.NVIDIA_VERIFIER_MODEL ??
-        process.env.NVIDIA_SOLVER_MODEL ??
-        "meta/llama-3.3-70b-instruct",
+        process.env.NVIDIA_VERIFIER_MODEL ?? "meta/llama-3.3-70b-instruct",
     });
   }
 
@@ -65,15 +64,22 @@ async function generateWithProvider(
     },
   });
 
-  const result = await generateText({
-    model: llm.chatModel(modelName),
-    system,
-    prompt,
-    temperature: 0.2,
-    maxOutputTokens: 4096,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  return result.text;
+  try {
+    const result = await generateText({
+      model: llm.chatModel(modelName),
+      system,
+      prompt,
+      temperature: 0.2,
+      maxOutputTokens: 4096,
+      abortSignal: controller.signal,
+    });
+    return result.text;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function runEducationalOrchestrator(request: EducationRequest) {
@@ -99,7 +105,7 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
     draft = await generateWithProvider(
       primary,
       solverModel,
-      textbookSystemPrompt,
+      getSystemPrompt(request.mode),
       buildTaskPrompt(request),
     );
     verification.push({
@@ -109,6 +115,7 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
       notes: "Generated the first textbook-grade solution.",
     });
   } catch (error) {
+    console.error("[orchestrator] Solver failed:", error);
     verification.push({
       model: `${primary.name}:${solverModel}`,
       role: "solver",
@@ -120,28 +127,37 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
 
   let finalDraft = draft;
 
-  try {
-    finalDraft = await generateWithProvider(
-      primary,
-      primary.verifierModel,
-      "You are a strict STEM verifier and structural answer formatter.",
-      buildVerifierPrompt(draft, request),
-    );
+  if (request.mode === "solver") {
+    try {
+      finalDraft = await generateWithProvider(
+        primary,
+        primary.verifierModel,
+        "You are a strict STEM verifier and structural answer formatter.",
+        buildVerifierPrompt(draft, request),
+      );
+      verification.push({
+        model: `${primary.name}:${primary.verifierModel}`,
+        role: "formatter",
+        status: "complete",
+        notes: "Checked and reorganized the model answer into a student-facing structure.",
+      });
+    } catch (error) {
+      verification.push({
+        model: `${primary.name}:${primary.verifierModel}`,
+        role: "formatter",
+        status: "fallback",
+        notes:
+          error instanceof Error
+            ? `Verifier failed; using primary answer. ${error.message}`
+            : "Verifier failed; using primary answer.",
+      });
+    }
+  } else {
     verification.push({
-      model: `${primary.name}:${primary.verifierModel}`,
+      model: `${primary.name}:${solverModel}`,
       role: "formatter",
       status: "complete",
-      notes: "Checked and reorganized the model answer into a student-facing structure.",
-    });
-  } catch (error) {
-    verification.push({
-      model: `${primary.name}:${primary.verifierModel}`,
-      role: "formatter",
-      status: "fallback",
-      notes:
-        error instanceof Error
-          ? `Verifier failed; using primary answer. ${error.message}`
-          : "Verifier failed; using primary answer.",
+      notes: `Single-pass generation for ${request.mode} mode.`,
     });
   }
 

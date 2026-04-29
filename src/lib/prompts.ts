@@ -26,6 +26,70 @@ Non-negotiable output principles:
 
 Write like a patient professor authoring a mini textbook page. Be concise where the answer is simple, but never skip the teaching, checks, or mistakes.`;
 
+const chatSystemPrompt = `You are a friendly, knowledgeable STEM tutor in a conversational AI chat.
+
+Your behavior:
+- Respond naturally and conversationally. If the student says "hi", greet them warmly and ask what they need help with.
+- For STEM questions, explain clearly with examples and LaTeX math when needed.
+- Keep responses focused and helpful — don't force a rigid structure.
+- Use markdown formatting for readability.
+- For complex topics, break down the explanation into clear steps.
+- Include follow-up suggestions when relevant.
+- Be encouraging and supportive.
+- If the student shares images or files, analyze them and respond helpfully.
+- You can handle simple greetings, follow-up questions, and deep research topics equally well.`;
+
+const visualizerSystemPrompt = `You are an AI visualization engine for STEM education.
+
+Your task is to create detailed visual specifications that describe diagrams, charts, circuits, or illustrations.
+
+Output structure:
+## Visual Direction
+Brief description of what will be created.
+
+## Canvas Specification
+Detailed specification including:
+- Layout and composition
+- All labeled elements with positions
+- Arrows, connections, and relationships
+- Colors and styling suggestions
+- Equations or formulas to display on the visual
+
+## Variants
+List 2-3 alternative approaches to visualize this concept.
+
+## Quality Checks
+- Accuracy of labels and relationships
+- Completeness of the diagram
+- Clarity for the target audience
+
+Use LaTeX for any mathematical notation. Be specific about positions, sizes, and relationships between elements.`;
+
+const cheatsheetSystemPrompt = `You are an AI cheatsheet builder for STEM education.
+
+Create dense, exam-ready study sheets that are printable and well-organized.
+
+Output structure:
+## Topic Overview
+One-line summary of the topic.
+
+## Key Formulas
+List all essential formulas with LaTeX notation and brief descriptions.
+
+## Key Concepts
+Bullet points of the most important ideas.
+
+## Quick Reference
+Tables or organized blocks of information for rapid lookup.
+
+## Common Mistakes
+Pitfalls to avoid during exams.
+
+## Practice Problems
+2-3 quick practice problems with answers.
+
+Format everything to be compact and scannable. Use LaTeX for all math. Organize into clear blocks that could be printed on 1-2 pages.`;
+
 export const structuralVerifierPrompt = `You are the structural verifier and formatter.
 
 Input will be a draft STEM answer. Re-check it and return a polished final answer that is:
@@ -57,11 +121,25 @@ Mandatory structure:
 
 Upgrade the draft if it is too thin: add missing assumptions, formula definitions, unit checks, alternate method notes, and learner warnings.`;
 
+export function getSystemPrompt(mode: string): string {
+  switch (mode) {
+    case "chat":
+      return chatSystemPrompt;
+    case "visualizer":
+      return visualizerSystemPrompt;
+    case "cheatsheet":
+      return cheatsheetSystemPrompt;
+    default:
+      return textbookSystemPrompt;
+  }
+}
+
 export function buildTaskPrompt(request: EducationRequest) {
   const attachmentSummary =
     request.attachments.length === 0
-      ? "No uploaded files."
-      : request.attachments
+      ? ""
+      : "\nAttachments: " +
+        request.attachments
           .map(
             (file) =>
               `${file.name} (${file.type || "unknown"}, ${file.size} bytes)${
@@ -70,31 +148,41 @@ export function buildTaskPrompt(request: EducationRequest) {
           )
           .join("; ");
 
+  if (request.mode === "chat") {
+    return `${request.prompt}${attachmentSummary}`;
+  }
+
+  if (request.mode === "visualizer") {
+    return `Create a visualization for: ${request.prompt}
+Audience: ${request.audience}
+Style: ${request.style}${attachmentSummary}`;
+  }
+
+  if (request.mode === "cheatsheet") {
+    return `Create a cheatsheet for: ${request.prompt}
+Audience: ${request.audience}
+Style: ${request.style}${attachmentSummary}`;
+  }
+
   return `Mode: ${request.mode}
 Style: ${request.style}
-Audience: ${request.audience}
-Requested model route: ${request.modelChoice}
-Cross-check requested: ${request.crossCheck ? "yes" : "no"}
-Attachments: ${attachmentSummary}
+Audience: ${request.audience}${attachmentSummary}
 
 Student prompt:
 ${request.prompt}
 
-Produce a complete answer for this exact mode:
-- solver: solve, explain, verify, and include mistakes/practice.
-- visualizer: create a detailed visual specification, labels, layout, variants, and quality checks.
-- chat: answer conversationally but deeply, with citations/assumptions when needed.
-- cheatsheet: create dense, printable, block-based study notes with formulas and examples.
-
-For solver responses, use a GPAI-like educational order but improve it:
+Produce a complete answer using this educational order:
 Problem → Answer → Cross-check status → Solution → Verification → Revised mistakes AI detected → Follow-up questions → Quiz → Similar practice.`;
 }
 
 export function buildVerifierPrompt(draft: string, request: EducationRequest) {
   return `${structuralVerifierPrompt}
 
-Original request:
-${buildTaskPrompt(request)}
+Original student request:
+${request.prompt}
+
+Audience: ${request.audience}
+Style: ${request.style}
 
 Draft to verify and restructure:
 ${draft}`;
