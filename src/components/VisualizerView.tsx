@@ -10,6 +10,7 @@ import type {
   VisualizerCategory,
 } from "@/types/education";
 import { Composer } from "@/components/Composer";
+import { MermaidBlock } from "@/components/MermaidBlock";
 
 type VisualizerViewProps = {
   modelChoice: ModelChoice;
@@ -150,7 +151,14 @@ export function VisualizerView({
             className={`visualizer-image visualizer-image-${ratio.replace(":", "x")}`}
           />
         )}
-        {result && !result.imageDataUrl && (
+        {result && !result.imageDataUrl && result.diagramSpec && (
+          <div
+            className={`visualizer-diagram visualizer-image-${ratio.replace(":", "x")}`}
+          >
+            <MermaidBlock code={result.diagramSpec} />
+          </div>
+        )}
+        {result && !result.imageDataUrl && !result.diagramSpec && (
           <div className="visualizer-fallback">
             <p>{result.description}</p>
           </div>
