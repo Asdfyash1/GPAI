@@ -1,0 +1,116 @@
+[
+  {
+    "mode": "solver",
+    "model": "demo",
+    "title": "Textbook-Grade STEM Solution",
+    "answer": "\\(x=2\\) or \\(x=3\\)",
+    "has_solution": true,
+    "sections": [
+      "Problem",
+      "Answer",
+      "Cross-check status",
+      "Solution",
+      "Verification",
+      "Revised mistakes AI detected",
+      "Follow-up questions",
+      "Quiz",
+      "Similar practice"
+    ],
+    "verification": [
+      {
+        "model": "local-demo:selected",
+        "role": "solver",
+        "status": "fallback",
+        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
+      }
+    ]
+  },
+  {
+    "mode": "solver",
+    "model": "mistral-large",
+    "title": "Textbook-Grade STEM Solution",
+    "answer": "A structured solution is generated with answer, reasoning, verification, mistakes, and practice.",
+    "has_solution": true,
+    "sections": [
+      "Problem",
+      "Answer",
+      "Cross-check status",
+      "Solution",
+      "Verification",
+      "Revised mistakes AI detected",
+      "Follow-up questions",
+      "Quiz",
+      "Similar practice"
+    ],
+    "verification": [
+      {
+        "model": "local-demo:selected",
+        "role": "solver",
+        "status": "fallback",
+        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
+      }
+    ]
+  },
+  {
+    "mode": "visualizer",
+    "model": "demo",
+    "title": "Publication-Ready STEM Visual Plan",
+    "answer": "A clear labeled diagram plan with hierarchy, formula callouts, variants, and export-ready layout.",
+    "has_solution": true,
+    "sections": [
+      "Final visual direction"
+    ],
+    "verification": [
+      {
+        "model": "local-demo:selected",
+        "role": "solver",
+        "status": "fallback",
+        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
+      }
+    ]
+  },
+  {
+    "mode": "chat",
+    "model": "demo",
+    "title": "Deep STEM Explanation",
+    "answer": "A structured solution is generated with answer, reasoning, verification, mistakes, and practice.",
+    "has_solution": true,
+    "sections": [
+      "Problem",
+      "Answer",
+      "Cross-check status",
+      "Solution",
+      "Verification",
+      "Revised mistakes AI detected",
+      "Follow-up questions",
+      "Quiz",
+      "Similar practice"
+    ],
+    "verification": [
+      {
+        "model": "local-demo:selected",
+        "role": "solver",
+        "status": "fallback",
+        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
+      }
+    ]
+  },
+  {
+    "mode": "cheatsheet",
+    "model": "demo",
+    "title": "Exam-Ready Study Cheatsheet",
+    "answer": "A compact printable study sheet with formulas, examples, traps, and review prompts.",
+    "has_solution": true,
+    "sections": [
+      "Cheatsheet objective"
+    ],
+    "verification": [
+      {
+        "model": "local-demo:selected",
+        "role": "solver",
+        "status": "fallback",
+        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
+      }
+    ]
+  }
+]
