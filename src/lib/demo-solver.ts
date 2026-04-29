@@ -201,7 +201,7 @@ export function buildDemoResponse(request: EducationRequest, verification: Verif
     visualizer: ["canvas hierarchy", "editable layers", "scientific labels", "export QA"],
     chat: ["intuition", "formal definition", "examples", "self-check"],
     cheatsheet: ["formula map", "micro-examples", "exam traps", "print layout"],
-  } satisfies Record<EducationRequest["mode"], string[]>;
+  } as Record<string, string[]>;
 
   const modeMistakes = {
     solver: [
@@ -224,14 +224,14 @@ export function buildDemoResponse(request: EducationRequest, verification: Verif
       "Listing formulas without variable definitions.",
       "Omitting common exam traps.",
     ],
-  } satisfies Record<EducationRequest["mode"], string[]>;
+  } as Record<string, string[]>;
 
   const modeFollowUps = {
     solver: ["Make it easier", "List key concepts", "Give similar practice", "Explain in English", "Create a quiz"],
     visualizer: ["Make a cleaner version", "Add labels", "Create flowchart variant", "Export as SVG plan", "Generate quiz from diagram"],
     chat: ["Explain with analogy", "Go deeper", "Make flashcards", "Give a real-world example", "Test me"],
     cheatsheet: ["Make it shorter", "Add examples", "Add memory tricks", "Create printable A4", "Turn into quiz"],
-  } satisfies Record<EducationRequest["mode"], string[]>;
+  } as Record<string, string[]>;
 
   const modeVisualPlan = {
     solver: [
@@ -258,7 +258,7 @@ export function buildDemoResponse(request: EducationRequest, verification: Verif
       "Exam traps strip.",
       "PDF/share/export controls.",
     ],
-  } satisfies Record<EducationRequest["mode"], string[]>;
+  } as Record<string, string[]>;
 
   const modeChecks = {
     solver: [
@@ -285,7 +285,7 @@ export function buildDemoResponse(request: EducationRequest, verification: Verif
       "Examples and traps are included.",
       "Layout is organized for A4/PDF export.",
     ],
-  } satisfies Record<EducationRequest["mode"], string[]>;
+  } as Record<string, string[]>;
 
   const modePractice = {
     solver: [
@@ -330,7 +330,7 @@ export function buildDemoResponse(request: EducationRequest, verification: Verif
         answer: "Compact formulas, examples, traps, and a review quiz.",
       },
     ],
-  } satisfies Record<EducationRequest["mode"], Array<{ question: string; answer: string }>>;
+  } as Record<string, Array<{ question: string; answer: string }>>;
 
   const modeQuiz = {
     solver: isPhysicsAcceleration(request.prompt)
@@ -354,7 +354,10 @@ export function buildDemoResponse(request: EducationRequest, verification: Verif
       { question: "Why use blocks?", answer: "Blocks make dense information scannable and printable." },
       { question: "What should the final strip contain?", answer: "A rapid review quiz or exam traps." },
     ],
-  } satisfies Record<EducationRequest["mode"], Array<{ question: string; answer: string }>>;
+  } as Record<string, Array<{ question: string; answer: string }>>;
+
+  const fallback = (record: Record<string, unknown[]>, fb: unknown[]) =>
+    record[request.mode] ?? record.solver ?? fb;
 
   return {
     id: `local_${Date.now()}`,
@@ -364,14 +367,20 @@ export function buildDemoResponse(request: EducationRequest, verification: Verif
     answer: inferAnswer(request),
     solution: buildMarkdown(request, steps),
     steps,
-    keyConcepts: modeKeyConcepts[request.mode],
-    commonMistakes: modeMistakes[request.mode],
-    checks: modeChecks[request.mode],
-    practice: modePractice[request.mode],
-    quiz: modeQuiz[request.mode],
-    visualPlan: modeVisualPlan[request.mode],
+    keyConcepts: fallback(modeKeyConcepts, []) as string[],
+    commonMistakes: fallback(modeMistakes, []) as string[],
+    checks: fallback(modeChecks, []) as string[],
+    practice: fallback(
+      modePractice,
+      [],
+    ) as Array<{ question: string; answer: string }>,
+    quiz: fallback(
+      modeQuiz,
+      [],
+    ) as Array<{ question: string; answer: string }>,
+    visualPlan: fallback(modeVisualPlan, []) as string[],
     cheatsheetBlocks: cheatsheetSteps,
-    followUps: modeFollowUps[request.mode],
+    followUps: fallback(modeFollowUps, []) as string[],
     confidence: verification.some((item) => item.status === "complete") ? 0.92 : 0.78,
     verification,
     createdAt: new Date().toISOString(),

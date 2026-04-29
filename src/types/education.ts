@@ -1,4 +1,11 @@
-export type FeatureMode = "solver" | "visualizer" | "chat" | "cheatsheet";
+export type FeatureMode =
+  | "solver"
+  | "visualizer"
+  | "chat"
+  | "cheatsheet"
+  | "report"
+  | "pdf-notes"
+  | "notebook";
 
 export type ExplanationStyle =
   | "step-by-step"
@@ -16,6 +23,8 @@ export type ModelChoice =
   | "deepseek-flash"
   | "llama"
   | "demo";
+
+export type FrameRatio = "16:9" | "4:3" | "1:1" | "a4-portrait" | "a4-landscape";
 
 export type UploadedAsset = {
   name: string;
@@ -72,6 +81,55 @@ export type EducationResponse = {
   cheatsheetBlocks: SolutionStep[];
   followUps: string[];
   confidence: number;
+  verification: VerificationSignal[];
+  createdAt: string;
+  imageUrl?: string;
+  diagramSpec?: string;
+};
+
+export type ChatRole = "user" | "assistant" | "system";
+
+export type ChatMessage = {
+  id: string;
+  role: ChatRole;
+  content: string;
+  attachments?: UploadedAsset[];
+  createdAt: string;
+  pending?: boolean;
+};
+
+export type ChatRequest = {
+  messages: Array<Pick<ChatMessage, "role" | "content"> & { attachments?: UploadedAsset[] }>;
+  modelChoice: ModelChoice;
+  deepExplain: boolean;
+};
+
+export type VisualizeRequest = {
+  prompt: string;
+  ratio: FrameRatio;
+  category: VisualizerCategory;
+  style: "illustration" | "diagram";
+};
+
+export type VisualizerCategory =
+  | "illustration"
+  | "graph"
+  | "flowchart"
+  | "diagram"
+  | "circuit"
+  | "chemistry"
+  | "logic";
+
+export type VisualizeResponse = {
+  id: string;
+  prompt: string;
+  category: VisualizerCategory;
+  ratio: FrameRatio;
+  imageDataUrl?: string;
+  diagramSpec?: string;
+  description: string;
+  variants: string[];
+  qualityChecks: string[];
   verification: VerificationSignal[];
   createdAt: string;
 };

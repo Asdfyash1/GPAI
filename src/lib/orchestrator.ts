@@ -1,6 +1,10 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { generateText } from "ai";
-import type { EducationRequest, VerificationSignal } from "@/types/education";
+import { generateText, streamText } from "ai";
+import type {
+  EducationRequest,
+  ModelChoice,
+  VerificationSignal,
+} from "@/types/education";
 import { buildDemoResponse } from "@/lib/demo-solver";
 import { parseModelResponse } from "@/lib/response-parser";
 import { buildTaskPrompt, buildVerifierPrompt, getSystemPrompt } from "@/lib/prompts";
@@ -17,14 +21,22 @@ const nvidiaModelRoutes = {
   demo: "local-demo",
 } as const;
 
-function selectedModel(choice: keyof typeof nvidiaModelRoutes) {
+export function selectedModel(choice: keyof typeof nvidiaModelRoutes) {
   if (choice === "demo") return "local-demo";
   const envName = `NVIDIA_MODEL_${choice.toUpperCase().replaceAll("-", "_")}`;
   return process.env[envName] ?? nvidiaModelRoutes[choice];
 }
 
-function configuredProviders() {
-  const providers = [];
+export type Provider = {
+  name: string;
+  key: string;
+  baseURL: string;
+  solverModel: string;
+  verifierModel: string;
+};
+
+export function configuredProviders(): Provider[] {
+  const providers: Provider[] = [];
 
   if (process.env.NVIDIA_API_KEY || process.env.NIM_API_KEY) {
     providers.push({
@@ -41,21 +53,19 @@ function configuredProviders() {
     providers.push({
       name: process.env.ADDITIONAL_OPENAI_COMPATIBLE_NAME ?? "Additional model",
       key: process.env.ADDITIONAL_OPENAI_COMPATIBLE_API_KEY,
-      baseURL: process.env.ADDITIONAL_OPENAI_COMPATIBLE_BASE_URL ?? "https://api.openai.com/v1",
-      solverModel: process.env.ADDITIONAL_OPENAI_COMPATIBLE_MODEL ?? "gpt-4o-mini",
-      verifierModel: process.env.ADDITIONAL_OPENAI_COMPATIBLE_MODEL ?? "gpt-4o-mini",
+      baseURL:
+        process.env.ADDITIONAL_OPENAI_COMPATIBLE_BASE_URL ?? "https://api.openai.com/v1",
+      solverModel:
+        process.env.ADDITIONAL_OPENAI_COMPATIBLE_MODEL ?? "gpt-4o-mini",
+      verifierModel:
+        process.env.ADDITIONAL_OPENAI_COMPATIBLE_MODEL ?? "gpt-4o-mini",
     });
   }
 
   return providers;
 }
 
-async function generateWithProvider(
-  provider: ReturnType<typeof configuredProviders>[number],
-  modelName: string,
-  system: string,
-  prompt: string,
-) {
+export function buildLanguageModel(provider: Provider, modelName: string) {
   const llm = createOpenAICompatible({
     name: provider.name.toLowerCase().replaceAll(" ", "-"),
     baseURL: provider.baseURL,
@@ -63,13 +73,21 @@ async function generateWithProvider(
       Authorization: `Bearer ${provider.key}`,
     },
   });
+  return llm.chatModel(modelName);
+}
 
+async function generateWithProvider(
+  provider: Provider,
+  modelName: string,
+  system: string,
+  prompt: string,
+) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     const result = await generateText({
-      model: llm.chatModel(modelName),
+      model: buildLanguageModel(provider, modelName),
       system,
       prompt,
       temperature: 0.2,
@@ -92,7 +110,8 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
       model: request.modelChoice === "demo" ? "local-demo:selected" : "local-demo",
       role: "solver",
       status: "fallback",
-      notes: "No NVIDIA/API key configured; returned deterministic demo output with the same structure.",
+      notes:
+        "No NVIDIA/API key configured; returned deterministic demo output with the same structure.",
     });
     return buildDemoResponse(request, verification);
   }
@@ -127,7 +146,7 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
 
   let finalDraft = draft;
 
-  if (request.mode === "solver") {
+  if (request.mode === "solver" || request.mode === "cheatsheet") {
     try {
       finalDraft = await generateWithProvider(
         primary,
@@ -161,7 +180,7 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
     });
   }
 
-  if (request.crossCheck) {
+  if (request.crossCheck && request.mode === "solver") {
     for (const provider of providers.slice(1, 3)) {
       try {
         await generateWithProvider(
@@ -188,4 +207,98 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
   }
 
   return parseModelResponse(finalDraft, request, verification);
+}
+
+export type StreamingHandle = {
+  textStream: AsyncIterable<string>;
+  /**
+   * Returns the final aggregated text. Resolves only after the underlying
+   * stream finishes.
+   */
+  text: Promise<string>;
+};
+
+export async function streamEducationalSolverDraft(
+  request: EducationRequest,
+): Promise<StreamingHandle> {
+  const providers = configuredProviders();
+  if (request.modelChoice === "demo" || providers.length === 0) {
+    return demoStream(request);
+  }
+
+  const primary = providers[0];
+  const requestedModel = selectedModel(request.modelChoice ?? "auto");
+  const modelName = requestedModel === "local-demo" ? primary.solverModel : requestedModel;
+
+  const result = streamText({
+    model: buildLanguageModel(primary, modelName),
+    system: getSystemPrompt(request.mode),
+    prompt: buildTaskPrompt(request),
+    temperature: 0.2,
+    maxOutputTokens: 4096,
+  });
+
+  return {
+    textStream: result.textStream,
+    text: Promise.resolve(result.text),
+  };
+}
+
+export async function streamChatResponse(options: {
+  messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
+  modelChoice: ModelChoice;
+  deepExplain: boolean;
+}): Promise<StreamingHandle> {
+  const providers = configuredProviders();
+  if (options.modelChoice === "demo" || providers.length === 0) {
+    return demoChatStream(options);
+  }
+
+  const primary = providers[0];
+  const requested = selectedModel(options.modelChoice ?? "auto");
+  const modelName = requested === "local-demo" ? primary.solverModel : requested;
+
+  const system = options.deepExplain
+    ? "You are a STEM tutor in 'Deep Explain' mode. Build a rich, multi-section explainer document. Use markdown headings (## or numbered like '1. ...') to structure the answer into 3-6 sections (Core idea, Formula/Definition, Worked intuition, Examples, Visual intuition, Common mistakes). Use LaTeX for math. End with 2-3 concise follow-up questions in plain bullet form."
+    : "You are a friendly, knowledgeable STEM tutor in a conversational chat. Reply concisely if the question is small-talk, in depth with structure if the topic warrants it. Always use LaTeX for math. Use bullet lists and short headings when helpful.";
+
+  const result = streamText({
+    model: buildLanguageModel(primary, modelName),
+    system,
+    messages: options.messages,
+    temperature: 0.3,
+    maxOutputTokens: 4096,
+  });
+
+  return {
+    textStream: result.textStream,
+    text: Promise.resolve(result.text),
+  };
+}
+
+async function demoStream(request: EducationRequest): Promise<StreamingHandle> {
+  const text = `# Demo response\n\nThis is a fallback because no NVIDIA / OpenAI-compatible API key is configured.\n\n## Problem\n${request.prompt}\n\n## Answer\nSet \`NVIDIA_API_KEY\` in \`.env.local\` to enable the real model.\n\n## Solution\nDeterministic demo output for the **${request.mode}** mode.`;
+  return {
+    textStream: chunked(text),
+    text: Promise.resolve(text),
+  };
+}
+
+async function demoChatStream(options: {
+  messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
+}): Promise<StreamingHandle> {
+  const last = options.messages[options.messages.length - 1]?.content ?? "";
+  const text = `Demo mode (no API key configured). You said: "${last.slice(0, 200)}"\n\nSet \`NVIDIA_API_KEY\` in \`.env.local\` to enable real chat.`;
+  return {
+    textStream: chunked(text),
+    text: Promise.resolve(text),
+  };
+}
+
+async function* chunked(text: string): AsyncGenerator<string> {
+  const tokens = text.match(/[\s\S]{1,16}/g) ?? [text];
+  for (const chunk of tokens) {
+    await new Promise((r) => setTimeout(r, 25));
+    yield chunk;
+  }
 }
