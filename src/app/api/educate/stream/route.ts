@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
         const verification: VerificationSignal[] = [
           {
-            model: "NVIDIA NIM",
+            model: "Cloud",
             role: "solver",
             status: "complete",
             notes: "Streamed primary draft to the client in real time.",

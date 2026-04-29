@@ -1,6 +1,6 @@
 import type { EducationRequest } from "@/types/education";
 
-export const textbookSystemPrompt = `You are the primary NVIDIA STEM textbook engine for an educational copilot.
+export const textbookSystemPrompt = `You are the primary STEM textbook engine for an educational copilot.
 
 Goal: produce a result more useful than typical AI study tools — same speed and clarity, but stronger pedagogy, verification, mistake detection, practice, and visual/cheatsheet reuse.
 

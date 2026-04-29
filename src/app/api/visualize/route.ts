@@ -101,14 +101,14 @@ export async function POST(request: Request) {
       variants = matchBullets(matchSection(md, "Variants"));
       qualityChecks = matchBullets(matchSection(md, "Quality checks"));
       verification.push({
-        model: `NVIDIA NIM:${modelName}`,
+        model: `Cloud:${modelName}`,
         role: "visualizer",
         status: "complete",
         notes: "Generated visual specification.",
       });
     } catch (error) {
       verification.push({
-        model: "NVIDIA NIM",
+        model: "Cloud",
         role: "visualizer",
         status: "fallback",
         notes: error instanceof Error ? error.message : "Spec generation failed.",
@@ -124,16 +124,16 @@ export async function POST(request: Request) {
         ratio,
       });
       verification.push({
-        model: "NVIDIA Flux 1 Schnell",
+        model: "Flux 1 Schnell",
         role: "visualizer",
         status: imageDataUrl ? "complete" : "fallback",
         notes: imageDataUrl
-          ? "Generated scientific illustration via NVIDIA Flux 1."
+          ? "Generated scientific illustration."
           : "Image generation skipped (no key).",
       });
     } catch (error) {
       verification.push({
-        model: "NVIDIA Flux 1 Schnell",
+        model: "Flux 1 Schnell",
         role: "visualizer",
         status: "fallback",
         notes: error instanceof Error ? error.message : "Image generation failed.",

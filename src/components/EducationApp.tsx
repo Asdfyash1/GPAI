@@ -91,8 +91,6 @@ export function EducationApp() {
         onSelect={handleSelectItem}
         onNewTask={handleNewTask}
         userLabel="hiyash04+asd1"
-        credits={50}
-        creditsMax={50}
       />
       <main className="workspace">
         <header className="workspace-topbar">

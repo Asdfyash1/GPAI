@@ -28,7 +28,7 @@ export const gpaiFeatureFindings = [
 
 export const openSourcePatterns = [
   "Next.js + Vercel route handlers for a deployment-friendly frontend and backend-for-frontend.",
-  "Vercel AI SDK OpenAI-compatible provider for NVIDIA NIM via https://integrate.api.nvidia.com/v1.",
+  "Vercel AI SDK OpenAI-compatible provider for cloud-hosted models.",
   "KaTeX-compatible markdown rendering through react-markdown, remark-math, and rehype-katex.",
   "Two-pass tutoring pattern from AI tutor research: solver generates a full solution, verifier locates errors or weak pedagogy, formatter remediates the final student-facing answer.",
   "Cloudflare AI Gateway/Workers can later proxy model calls for caching, rate limiting, analytics, dynamic routing, and fallback policies.",
@@ -36,8 +36,8 @@ export const openSourcePatterns = [
 
 export const architectureHighlights = [
   "Planner routes each request by mode, attachments, and requested style.",
-  "Textbook-grade NVIDIA solver writes the core explanation with definitions, formulas, assumptions, derivations, checks, and common mistakes.",
-  "Cross-check critics compare final answer, formulas, unit consistency, and skipped reasoning across NVIDIA plus any configured OpenAI-compatible providers.",
+  "Textbook-grade solver writes the core explanation with definitions, formulas, assumptions, derivations, checks, and common mistakes.",
+  "Cross-check critics compare final answer, formulas, unit consistency, and skipped reasoning across any configured providers.",
   "Structural formatter rewrites the result into a stable schema: answer, step list, key concepts, common mistakes, checks, practice, quiz, visual plan, and cheatsheet blocks.",
   "UI renders the schema as an educational workspace rather than dumping raw model text.",
 ];

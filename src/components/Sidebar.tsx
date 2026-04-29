@@ -18,8 +18,6 @@ type SidebarProps = {
   onSelect: (item: SidebarItem) => void;
   onNewTask: () => void;
   userLabel?: string;
-  credits?: number;
-  creditsMax?: number;
 };
 
 export function Sidebar({
@@ -30,8 +28,6 @@ export function Sidebar({
   onSelect,
   onNewTask,
   userLabel = "Guest",
-  credits,
-  creditsMax,
 }: SidebarProps) {
   return (
     <aside className={`sidebar ${collapsed ? "is-collapsed" : ""}`}>
@@ -97,27 +93,6 @@ export function Sidebar({
       )}
 
       <div className="sidebar-bottom">
-        {!collapsed && credits != null && creditsMax != null && (
-          <div className="credits-card">
-            <div className="credits-row">
-              <span className="credits-label">⚡ Credits</span>
-              <span className="credits-value">
-                {credits} / {creditsMax}
-              </span>
-            </div>
-            <div
-              className="credits-bar"
-              role="progressbar"
-              aria-valuenow={credits}
-              aria-valuemax={creditsMax}
-            >
-              <span style={{ width: `${(credits / creditsMax) * 100}%` }} />
-            </div>
-            <button className="upgrade-btn" type="button">
-              Upgrade
-            </button>
-          </div>
-        )}
         <div className="profile-row">
           <span className="profile-avatar" aria-hidden>
             {userLabel.charAt(0).toUpperCase()}
