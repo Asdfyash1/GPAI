@@ -123,6 +123,44 @@ const visualCategories = [
 
 const initialPrompt = "Solve x^2 - 5x + 6 = 0. Explain like a patient textbook teacher, show checks, and include common mistakes.";
 
+const submitLabels: Record<FeatureMode, { idle: string; loading: string; status: string }> = {
+  solver: { idle: "Solve", loading: "Solving", status: "Solving → checking → formatting" },
+  visualizer: { idle: "Visualize", loading: "Building", status: "Designing canvas → labeling → export QA" },
+  chat: { idle: "Send", loading: "Thinking", status: "Reading context → explaining → suggesting follow-ups" },
+  cheatsheet: { idle: "Generate", loading: "Writing", status: "Planning blocks → compressing notes → print QA" },
+};
+
+const resultLabels: Record<FeatureMode, { answer: string; checked: string; solution: string; side: string; plan: string }> = {
+  solver: {
+    answer: "Answer",
+    checked: "Cross-checked",
+    solution: "Solution",
+    side: "Verifier passes",
+    plan: "Visual / cheatsheet plan",
+  },
+  visualizer: {
+    answer: "Visual direction",
+    checked: "Quality checked",
+    solution: "Canvas specification",
+    side: "Quality checks",
+    plan: "Export / edit plan",
+  },
+  chat: {
+    answer: "Response",
+    checked: "Tutor checked",
+    solution: "Deep explanation",
+    side: "Tutor checks",
+    plan: "Study actions",
+  },
+  cheatsheet: {
+    answer: "Output",
+    checked: "Print checked",
+    solution: "Cheatsheet",
+    side: "Study checks",
+    plan: "Printable layout",
+  },
+};
+
 export function EducationApp() {
   const [mode, setMode] = useState<FeatureMode>("solver");
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -139,11 +177,12 @@ export function EducationApp() {
 
   const activeMode = useMemo(() => modes.find((item) => item.id === mode) ?? modes[0], [mode]);
   const ActiveIcon = activeMode.icon;
+  const currentSubmitLabel = submitLabels[mode];
 
   async function submit(nextPrompt = prompt, nextMode = mode) {
     if (!nextPrompt.trim()) return;
     setIsLoading(true);
-    setMessage("Planning → NVIDIA draft → verifier → structural formatter");
+    setMessage(submitLabels[nextMode].status);
 
     const request: EducationRequest = {
       mode: nextMode,
@@ -165,7 +204,7 @@ export function EducationApp() {
       if ("error" in data) throw new Error(data.error);
       setResult(data);
       setHistory((items) => [data, ...items].slice(0, 10));
-      setMessage("Cross-checked and formatted");
+      setMessage(`${resultLabels[nextMode].checked} and formatted`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Generation failed");
     } finally {
@@ -210,6 +249,8 @@ export function EducationApp() {
     setMode(nextMode);
     setPrompt("");
     setResult(null);
+    setAttachments([]);
+    setMessage("");
   }
 
   async function share() {
@@ -245,7 +286,15 @@ export function EducationApp() {
             <span>STEM copilot</span>
           </div>
         </div>
-        <button className="new-task" onClick={() => setResult(null)}>
+        <button
+          className="new-task"
+          onClick={() => {
+            setPrompt("");
+            setResult(null);
+            setAttachments([]);
+            setMessage("");
+          }}
+        >
           <Sparkles size={16} />
           New task
         </button>
@@ -345,13 +394,17 @@ export function EducationApp() {
             </div>
             <button className="submit" disabled={!prompt.trim() || isLoading} onClick={() => void submit()}>
               {isLoading ? <RefreshCcw className="spin" size={16} /> : <Play size={16} />}
-              {isLoading ? "Solving" : "Submit"}
+              {isLoading ? currentSubmitLabel.loading : currentSubmitLabel.idle}
             </button>
           </div>
           {attachments.length > 0 && (
             <div className="attachments">
               {attachments.map((file) => (
-                <span key={`${file.name}-${file.size}`}>{file.name}</span>
+                <span key={`${file.name}-${file.size}`}>
+                  {file.preview ? <span className="attachment-thumb" /> : <FileText size={13} />}
+                  {file.name}
+                  {file.extractedText ? " · analyzed" : ""}
+                </span>
               ))}
             </div>
           )}
@@ -412,7 +465,7 @@ export function EducationApp() {
             </div>
 
             <div className="answer-card">
-              <span>Answer</span>
+              <span>{resultLabels[result.mode].answer}</span>
               <div className="answer-math">
                 {/[\\^_=]/.test(result.answer) ? (
                   <MathMarkdown content={`$$${result.answer.replaceAll("\\(", "").replaceAll("\\)", "")}$$`} />
@@ -422,7 +475,7 @@ export function EducationApp() {
               </div>
               <em>
                 <CheckCircle2 size={14} />
-                Cross-checked
+                {resultLabels[result.mode].checked}
               </em>
             </div>
 
@@ -430,8 +483,8 @@ export function EducationApp() {
               <article className="solution-card">
                 <div className="section-title">
                   <BookOpen size={18} />
-                  Solution
-                  <button>
+                  {resultLabels[result.mode].solution}
+                  <button onClick={() => setPrompt(result.prompt)}>
                     <Edit3 size={14} />
                     Edit
                   </button>
@@ -445,7 +498,7 @@ export function EducationApp() {
 
               <aside className="inspector">
                 <section>
-                  <h3>Verifier passes</h3>
+                  <h3>{resultLabels[result.mode].side}</h3>
                   {result.verification.map((signal) => (
                     <div className="signal" key={`${signal.model}-${signal.role}`}>
                       <Bot size={14} />
@@ -504,7 +557,7 @@ export function EducationApp() {
                 ))}
               </article>
               <article>
-                <h3>Visual / cheatsheet plan</h3>
+                <h3>{resultLabels[result.mode].plan}</h3>
                 <ul>
                   {result.visualPlan.map((item) => (
                     <li key={item}>{item}</li>

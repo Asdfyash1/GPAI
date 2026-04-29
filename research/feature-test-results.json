@@ -1,116 +1,123 @@
 [
   {
     "mode": "solver",
-    "model": "demo",
+    "prompt": "Solve x^2 - 5x + 6 = 0 and include common mistakes",
     "title": "Textbook-Grade STEM Solution",
-    "answer": "\\(x=2\\) or \\(x=3\\)",
-    "has_solution": true,
-    "sections": [
-      "Problem",
-      "Answer",
-      "Cross-check status",
-      "Solution",
-      "Verification",
-      "Revised mistakes AI detected",
-      "Follow-up questions",
-      "Quiz",
-      "Similar practice"
+    "answer": "x=2 \\text{ or } x=3",
+    "headers": [
+      "## Problem",
+      "## Answer",
+      "## Cross-check status",
+      "## Solution",
+      "## Verification",
+      "## Revised mistakes AI detected",
+      "## Follow-up questions",
+      "## Quiz"
     ],
-    "verification": [
-      {
-        "model": "local-demo:selected",
-        "role": "solver",
-        "status": "fallback",
-        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
-      }
+    "keyConcepts": [
+      "standard form",
+      "factoring",
+      "zero product property",
+      "verification"
+    ],
+    "followUps": [
+      "Make it easier",
+      "List key concepts",
+      "Give similar practice"
     ]
   },
   {
     "mode": "solver",
-    "model": "mistral-large",
+    "prompt": "A 5 kg block is pushed by 20 N on frictionless surface. Find acceleration with units and check.",
     "title": "Textbook-Grade STEM Solution",
-    "answer": "A structured solution is generated with answer, reasoning, verification, mistakes, and practice.",
-    "has_solution": true,
-    "sections": [
-      "Problem",
-      "Answer",
-      "Cross-check status",
-      "Solution",
-      "Verification",
-      "Revised mistakes AI detected",
-      "Follow-up questions",
-      "Quiz",
-      "Similar practice"
+    "answer": "a=4\\,\\text{m/s}^2",
+    "headers": [
+      "## Problem",
+      "## Answer",
+      "## Cross-check status",
+      "## Solution",
+      "## Verification",
+      "## Revised mistakes AI detected",
+      "## Follow-up questions",
+      "## Quiz"
     ],
-    "verification": [
-      {
-        "model": "local-demo:selected",
-        "role": "solver",
-        "status": "fallback",
-        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
-      }
+    "keyConcepts": [
+      "Newton's second law",
+      "net force",
+      "mass",
+      "unit check"
+    ],
+    "followUps": [
+      "Make it easier",
+      "List key concepts",
+      "Give similar practice"
     ]
   },
   {
     "mode": "visualizer",
-    "model": "demo",
+    "prompt": "Draw a labeled RC low-pass filter circuit with cutoff formula",
     "title": "Publication-Ready STEM Visual Plan",
-    "answer": "A clear labeled diagram plan with hierarchy, formula callouts, variants, and export-ready layout.",
-    "has_solution": true,
-    "sections": [
-      "Final visual direction"
+    "answer": "Editable diagram specification ready",
+    "headers": [
+      "## Canvas plan",
+      "## Diagram specification",
+      "## Export checklist"
     ],
-    "verification": [
-      {
-        "model": "local-demo:selected",
-        "role": "solver",
-        "status": "fallback",
-        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
-      }
+    "keyConcepts": [
+      "canvas hierarchy",
+      "editable layers",
+      "scientific labels",
+      "export QA"
+    ],
+    "followUps": [
+      "Make a cleaner version",
+      "Add labels",
+      "Create flowchart variant"
     ]
   },
   {
     "mode": "chat",
-    "model": "demo",
+    "prompt": "Explain entropy intuitively, then mathematically",
     "title": "Deep STEM Explanation",
-    "answer": "A structured solution is generated with answer, reasoning, verification, mistakes, and practice.",
-    "has_solution": true,
-    "sections": [
-      "Problem",
-      "Answer",
-      "Cross-check status",
-      "Solution",
-      "Verification",
-      "Revised mistakes AI detected",
-      "Follow-up questions",
-      "Quiz",
-      "Similar practice"
+    "answer": "Deep explanation with examples and follow-ups",
+    "headers": [
+      "## Tutor response",
+      "## Example",
+      "## Mathematical anchor",
+      "## Follow-up"
     ],
-    "verification": [
-      {
-        "model": "local-demo:selected",
-        "role": "solver",
-        "status": "fallback",
-        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
-      }
+    "keyConcepts": [
+      "intuition",
+      "formal definition",
+      "examples",
+      "self-check"
+    ],
+    "followUps": [
+      "Explain with analogy",
+      "Go deeper",
+      "Make flashcards"
     ]
   },
   {
     "mode": "cheatsheet",
-    "model": "demo",
+    "prompt": "Generate a 2 page mechanics cheatsheet for projectile motion",
     "title": "Exam-Ready Study Cheatsheet",
-    "answer": "A compact printable study sheet with formulas, examples, traps, and review prompts.",
-    "has_solution": true,
-    "sections": [
-      "Cheatsheet objective"
+    "answer": "Printable study sheet generated",
+    "headers": [
+      "## A4 cheatsheet",
+      "## Recommended blocks",
+      "## Printable layout"
     ],
-    "verification": [
-      {
-        "model": "local-demo:selected",
-        "role": "solver",
-        "status": "fallback",
-        "notes": "No NVIDIA/API key configured; returned deterministic demo output with the same structure."
-      }
+    "keyConcepts": [
+      "formula map",
+      "micro-examples",
+      "exam traps",
+      "print layout"
+    ],
+    "followUps": [
+      "Make it shorter",
+      "Add examples",
+      "Add memory tricks"
     ]
   }
 ]

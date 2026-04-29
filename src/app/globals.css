@@ -317,8 +317,20 @@ button {
 .attachments span,
 .pill {
   display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 7px 10px;
   font-size: 12px;
+}
+
+.attachment-thumb {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.65), rgba(20, 184, 166, 0.25)),
+    repeating-linear-gradient(45deg, transparent 0 5px, rgba(255, 255, 255, 0.75) 6px 7px);
 }
 
 .quick-grid,
