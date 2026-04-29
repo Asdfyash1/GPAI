@@ -835,6 +835,18 @@ a {
   cursor: not-allowed;
 }
 
+.chip-accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+  gap: 4px;
+}
+
+.chip-accent:hover:not(:disabled) {
+  background: var(--accent);
+  color: white;
+}
+
 /* ===========  SOLVER LAYOUT ============ */
 
 .solver-layout {

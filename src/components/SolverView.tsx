@@ -8,6 +8,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  Image as ImageIcon,
   Link as LinkIcon,
   Sparkles,
 } from "lucide-react";
@@ -30,6 +31,7 @@ type SolverViewProps = {
   prompt: string;
   setPrompt: (p: string) => void;
   onAddHistory: (r: EducationResponse) => void;
+  onVisualize: (prompt: string) => void;
 };
 
 const QUICK_DEMOS = [
@@ -129,6 +131,7 @@ export function SolverView(props: SolverViewProps) {
           error={stream.error}
           result={props.result}
           onChip={handleQuickAction}
+          onVisualize={props.onVisualize}
         />
       )}
     </div>
@@ -185,12 +188,14 @@ function SolverResult({
   error,
   result,
   onChip,
+  onVisualize,
 }: {
   streamText: string;
   isStreaming: boolean;
   error: string | null;
   result: EducationResponse | null;
   onChip: (chip: string) => void;
+  onVisualize: (prompt: string) => void;
 }) {
   const [tab, setTab] = useState<"followups" | "quiz">("followups");
   const [chatInput, setChatInput] = useState("");
@@ -245,7 +250,16 @@ function SolverResult({
         <section className="result-section">
           <div className="section-row">
             <h2 className="section-heading">Solution</h2>
-            <button className="link-button" type="button" aria-label="Copy">
+            <button
+              className="link-button"
+              type="button"
+              aria-label="Copy"
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.clipboard) {
+                  navigator.clipboard.writeText(text).catch(() => {});
+                }
+              }}
+            >
               <Copy size={14} /> Copy
             </button>
           </div>
@@ -320,6 +334,15 @@ function SolverResult({
                   {chip}
                 </button>
               ))}
+              {result && (
+                <button
+                  type="button"
+                  className="chip chip-accent"
+                  onClick={() => onVisualize(result.prompt)}
+                >
+                  <ImageIcon size={12} /> Visualize this
+                </button>
+              )}
             </div>
             {result?.followUps && result.followUps.length > 0 && (
               <div className="chip-grid">
