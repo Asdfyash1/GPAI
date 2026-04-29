@@ -3,7 +3,7 @@ import { analyzeUploadedImages } from "@/lib/vision";
 import type { EducationRequest } from "@/types/education";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 function isValidMode(mode: unknown) {
   return mode === "solver" || mode === "visualizer" || mode === "chat" || mode === "cheatsheet";

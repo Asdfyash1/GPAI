@@ -1941,6 +1941,57 @@ a {
   color: var(--ink);
 }
 
+.math-markdown .katex {
+  font-size: 1.05em;
+}
+
+.math-markdown .katex-display {
+  display: block;
+  margin: 0.9em 0;
+  padding: 10px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.math-markdown .katex-display > .katex {
+  display: block;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.math-markdown .katex-display > .katex > .katex-html {
+  display: block;
+  position: relative;
+}
+
+.math-markdown .katex-display > .katex > .katex-html > .tag {
+  position: absolute;
+  right: 0;
+}
+
+.math-markdown :not(.katex-display) > .katex {
+  background: var(--code-bg);
+  padding: 0 4px;
+  border-radius: 5px;
+}
+
+.math-markdown .katex-html .boxed,
+.math-markdown .katex .mord.boxed {
+  border-color: var(--accent) !important;
+}
+
+.math-markdown .katex .accent,
+.math-markdown .katex .mord.accent {
+  color: inherit;
+}
+
+[data-theme="dark"] .math-markdown .katex-display {
+  background: rgba(255, 255, 255, 0.02);
+}
+
 /* ===========  RESPONSIVE ============ */
 
 @media (max-width: 980px) {
