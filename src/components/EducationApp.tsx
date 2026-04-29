@@ -20,6 +20,7 @@ type Theme = "dark" | "light";
 
 const HISTORY_KEY = "eduforge:history";
 const THEME_KEY = "eduforge:theme";
+const STORE_KEY = "eduforge:responses";
 
 export function EducationApp() {
   const [mode, setMode] = useState<FeatureMode>("solver");
@@ -31,6 +32,8 @@ export function EducationApp() {
   const [solverResult, setSolverResult] = useState<EducationResponse | null>(null);
   const [history, setHistory] = useState<SidebarItem[]>([]);
   const [activeItem, setActiveItem] = useState<string | undefined>();
+  const [responseStore, setResponseStore] = useState<Record<string, EducationResponse>>({});
+  const [visualizerSeed, setVisualizerSeed] = useState<string>("");
 
   // Initial theme + history load (defer to next tick so React rule allows it)
   useEffect(() => {
@@ -39,11 +42,20 @@ export function EducationApp() {
       const savedTheme = localStorage.getItem(THEME_KEY) as Theme | null;
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
       const savedHistory = localStorage.getItem(HISTORY_KEY);
-      if (!savedHistory) return;
-      try {
-        setHistory(JSON.parse(savedHistory) as SidebarItem[]);
-      } catch {
-        /* ignore */
+      if (savedHistory) {
+        try {
+          setHistory(JSON.parse(savedHistory) as SidebarItem[]);
+        } catch {
+          /* ignore */
+        }
+      }
+      const savedStore = localStorage.getItem(STORE_KEY);
+      if (savedStore) {
+        try {
+          setResponseStore(JSON.parse(savedStore) as Record<string, EducationResponse>);
+        } catch {
+          /* ignore */
+        }
       }
     });
   }, []);
@@ -59,6 +71,20 @@ export function EducationApp() {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 25)));
   }, [history]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const ids = new Set(history.map((h) => h.id));
+      const trimmed: Record<string, EducationResponse> = {};
+      for (const id of ids) {
+        if (responseStore[id]) trimmed[id] = responseStore[id];
+      }
+      localStorage.setItem(STORE_KEY, JSON.stringify(trimmed));
+    } catch {
+      /* quota exceeded etc — best-effort persist */
+    }
+  }, [responseStore, history]);
+
   const onAddHistory = (response: EducationResponse) => {
     const item: SidebarItem = {
       id: response.id,
@@ -67,6 +93,7 @@ export function EducationApp() {
     };
     setHistory((prev) => [item, ...prev.filter((p) => p.id !== item.id)].slice(0, 25));
     setActiveItem(item.id);
+    setResponseStore((prev) => ({ ...prev, [response.id]: response }));
   };
 
   const handleNewTask = () => {
@@ -74,11 +101,24 @@ export function EducationApp() {
     setSolverResult(null);
     setActiveItem(undefined);
     setAttachments([]);
+    setVisualizerSeed("");
   };
 
   const handleSelectItem = (item: SidebarItem) => {
     setMode(item.mode);
     setActiveItem(item.id);
+    const stored = responseStore[item.id];
+    if (stored && stored.mode === "solver") {
+      setSolverResult(stored);
+      setSolverPrompt(stored.prompt);
+    } else {
+      setSolverResult(null);
+    }
+  };
+
+  const handleJumpToVisualizer = (prompt: string) => {
+    setVisualizerSeed(prompt);
+    setMode("visualizer");
   };
 
   return (
@@ -123,6 +163,7 @@ export function EducationApp() {
               result={solverResult}
               setResult={setSolverResult}
               onAddHistory={onAddHistory}
+              onVisualize={handleJumpToVisualizer}
             />
           )}
           {mode === "chat" && (
@@ -141,6 +182,8 @@ export function EducationApp() {
             <VisualizerView
               modelChoice={modelChoice}
               setModelChoice={setModelChoice}
+              seedPrompt={visualizerSeed}
+              clearSeed={() => setVisualizerSeed("")}
             />
           )}
           {mode === "report" && (

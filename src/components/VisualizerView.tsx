@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, Loader2, RefreshCcw } from "lucide-react";
 import type {
   FrameRatio,
@@ -14,6 +14,8 @@ import { Composer } from "@/components/Composer";
 type VisualizerViewProps = {
   modelChoice: ModelChoice;
   setModelChoice: (m: ModelChoice) => void;
+  seedPrompt?: string;
+  clearSeed?: () => void;
 };
 
 const RATIOS: Array<{ id: FrameRatio; label: string }> = [
@@ -46,8 +48,18 @@ const QUICK = [
 export function VisualizerView({
   modelChoice,
   setModelChoice,
+  seedPrompt,
+  clearSeed,
 }: VisualizerViewProps) {
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(seedPrompt ?? "");
+
+  useEffect(() => {
+    if (!seedPrompt) return;
+    queueMicrotask(() => {
+      setPrompt(seedPrompt);
+      clearSeed?.();
+    });
+  }, [seedPrompt, clearSeed]);
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
   const [ratio, setRatio] = useState<FrameRatio>("16:9");
   const [category, setCategory] = useState<VisualizerCategory>("illustration");
