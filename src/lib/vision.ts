@@ -2,6 +2,7 @@ import type { UploadedAsset } from "@/types/education";
 
 const visionBaseUrl = "https://integrate.api.nvidia.com/v1/chat/completions";
 const visionModel = "mistralai/mistral-large-3-675b-instruct-2512";
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 type NvidiaVisionContent =
   | { type: "text"; text: string }
@@ -13,6 +14,7 @@ type NvidiaVisionResponse = {
       content?: string;
     };
   }>;
+  error?: { message?: string };
 };
 
 function visionApiKey() {
@@ -24,9 +26,14 @@ function visionApiKey() {
   );
 }
 
-async function describeImage(asset: UploadedAsset) {
+async function describeImage(asset: UploadedAsset): Promise<string | undefined> {
   const key = visionApiKey();
-  if (!key || !asset.dataUrl || !asset.type.startsWith("image/")) return undefined;
+  if (!key) return "[Image uploaded but no vision API key configured]";
+  if (!asset.dataUrl || !asset.type.startsWith("image/")) return undefined;
+
+  if (asset.dataUrl.length > MAX_IMAGE_BYTES) {
+    return "[Image too large for vision analysis — please upload a smaller image under 20 MB]";
+  }
 
   const content: NvidiaVisionContent[] = [
     {
@@ -62,11 +69,24 @@ async function describeImage(asset: UploadedAsset) {
   });
 
   if (!response.ok) {
-    throw new Error(`NVIDIA image analysis failed: ${response.status} ${response.statusText}`);
+    let detail = response.statusText;
+    try {
+      const errorBody = (await response.json()) as NvidiaVisionResponse;
+      if (errorBody.error?.message) detail = errorBody.error.message;
+    } catch {
+      /* use statusText */
+    }
+    throw new Error(
+      `NVIDIA vision API returned ${response.status}: ${detail}`,
+    );
   }
 
   const data = (await response.json()) as NvidiaVisionResponse;
-  return data.choices?.[0]?.message?.content;
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) {
+    throw new Error("NVIDIA vision API returned an empty response");
+  }
+  return text;
 }
 
 export async function analyzeUploadedImages(attachments: UploadedAsset[]) {
@@ -79,15 +99,17 @@ export async function analyzeUploadedImages(attachments: UploadedAsset[]) {
     }
 
     try {
+      const extractedText = await describeImage(asset);
       analyzed.push({
         ...asset,
-        extractedText: await describeImage(asset),
+        extractedText,
         dataUrl: undefined,
       });
     } catch (error) {
+      console.error(`[vision] Failed to analyze ${asset.name}:`, error);
       analyzed.push({
         ...asset,
-        extractedText: error instanceof Error ? error.message : "Image analysis failed.",
+        extractedText: `[Image analysis failed: ${error instanceof Error ? error.message : "unknown error"}]`,
         dataUrl: undefined,
       });
     }

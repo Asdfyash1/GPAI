@@ -2,6 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import type { EducationRequest, VerificationSignal } from "@/types/education";
 import { buildDemoResponse } from "@/lib/demo-solver";
+import { parseModelResponse } from "@/lib/response-parser";
 import { buildTaskPrompt, buildVerifierPrompt, textbookSystemPrompt } from "@/lib/prompts";
 
 const nvidiaBaseUrl = "https://integrate.api.nvidia.com/v1";
@@ -69,6 +70,7 @@ async function generateWithProvider(
     system,
     prompt,
     temperature: 0.2,
+    maxOutputTokens: 4096,
   });
 
   return result.text;
@@ -169,12 +171,5 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
     }
   }
 
-  const response = buildDemoResponse(request, verification);
-  return {
-    ...response,
-    solution: finalDraft,
-    answer: response.answer === "A structured solution is generated with answer, reasoning, verification, mistakes, and practice."
-      ? "See the structured solution below."
-      : response.answer,
-  };
+  return parseModelResponse(finalDraft, request, verification);
 }
