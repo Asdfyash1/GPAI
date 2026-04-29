@@ -52,7 +52,18 @@ function categoryStylePrefix(category: VisualizerCategory): string {
 }
 
 function specSystem(category: VisualizerCategory) {
-  return `You are an AI visualization engine for STEM education. The user wants a ${category} visualization.\n\nReturn:\n## Description\n2-3 sentences plain-English summary of what the diagram should show.\n\n## Variants\n3 short bullet points of alternative approaches.\n\n## Quality checks\n3 short bullet points (accuracy, completeness, clarity).\n\nKeep the whole response under 220 words. Use markdown only — no code fences.`;
+  const wantMermaid = category !== "illustration" && category !== "chemistry";
+  const mermaidBlock = wantMermaid
+    ? "\n\n## Mermaid\n\u0060\u0060\u0060mermaid\n<a complete Mermaid diagram — flowchart TD or graph LR for flowchart/diagram/logic, classDiagram or stateDiagram-v2 if more appropriate. Keep node labels short. Avoid quotes inside labels.>\n\u0060\u0060\u0060"
+    : "";
+  return `You are an AI visualization engine for STEM education. The user wants a ${category} visualization.\n\nReturn:\n## Description\n2-3 sentences plain-English summary of what the diagram should show.\n\n## Variants\n3 short bullet points of alternative approaches.\n\n## Quality checks\n3 short bullet points (accuracy, completeness, clarity).${mermaidBlock}\n\nKeep prose under 220 words. Use markdown.`;
+}
+
+function extractMermaid(md: string): string | undefined {
+  const m = /\u0060\u0060\u0060mermaid\s*([\s\S]*?)\u0060\u0060\u0060/i.exec(md);
+  if (!m) return undefined;
+  const code = m[1].trim();
+  return code.length > 0 ? code : undefined;
 }
 
 export async function POST(request: Request) {
@@ -81,6 +92,7 @@ export async function POST(request: Request) {
   let description = "";
   let variants: string[] = [];
   let qualityChecks: string[] = [];
+  let diagramSpec: string | undefined;
 
   if (providers.length > 0) {
     try {
@@ -100,6 +112,7 @@ export async function POST(request: Request) {
       description = matchSection(md, "Description") || md.split("\n").slice(0, 4).join(" ");
       variants = matchBullets(matchSection(md, "Variants"));
       qualityChecks = matchBullets(matchSection(md, "Quality checks"));
+      diagramSpec = extractMermaid(md);
       verification.push({
         model: `Cloud:${modelName}`,
         role: "visualizer",
@@ -147,6 +160,7 @@ export async function POST(request: Request) {
     category,
     ratio,
     imageDataUrl,
+    diagramSpec,
     description: description || `Visualization plan for: ${body.prompt}`,
     variants:
       variants.length > 0

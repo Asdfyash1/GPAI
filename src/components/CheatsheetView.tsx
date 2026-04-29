@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { History, Trash2 } from "lucide-react";
 import {
   Bold,
   Download,
@@ -10,6 +11,7 @@ import {
   Minus,
   Plus,
   Printer,
+  RotateCcw,
   Sigma,
   Underline,
 } from "lucide-react";
@@ -21,6 +23,13 @@ import { useStream } from "@/hooks/useStream";
 type CheatsheetViewProps = {
   modelChoice: ModelChoice;
   setModelChoice: (m: ModelChoice) => void;
+};
+
+type CheatsheetVersion = {
+  id: string;
+  label: string;
+  content: string;
+  createdAt: string;
 };
 
 const QUICK = [
@@ -35,9 +44,21 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
   const [content, setContent] = useState("");
   const [zoom, setZoom] = useState(100);
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<CheatsheetVersion[]>([]);
   const stream = useStream();
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement | null>(null);
+
+  const pushVersion = (label: string, body: string) => {
+    const id = `cs_${Date.now()}`;
+    setHistory((h) =>
+      [{ id, label, content: body, createdAt: new Date().toISOString() }, ...h].slice(
+        0,
+        12,
+      ),
+    );
+    setActiveVersionId(id);
+  };
 
   const generate = (overridePrompt?: string) => {
     const final = (overridePrompt ?? prompt).trim();
@@ -58,7 +79,7 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
         onChunk: (text) => setContent(text),
         onFinal: (text) => {
           setContent(text);
-          setHistory((h) => [text, ...h].slice(0, 5));
+          pushVersion(final.slice(0, 60), text);
         },
       },
     );
@@ -85,10 +106,22 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
         onChunk: (text) => setContent(text),
         onFinal: (text) => {
           setContent(text);
-          setHistory((h) => [text, ...h].slice(0, 5));
+          pushVersion(`Edit: ${instruction.slice(0, 50)}`, text);
         },
       },
     );
+  };
+
+  const restoreVersion = (id: string) => {
+    const v = history.find((h) => h.id === id);
+    if (!v) return;
+    setContent(v.content);
+    setActiveVersionId(id);
+  };
+
+  const deleteVersion = (id: string) => {
+    setHistory((h) => h.filter((v) => v.id !== id));
+    if (activeVersionId === id) setActiveVersionId(null);
   };
 
   const handlePrint = () => {
@@ -158,12 +191,56 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
           </button>
         </div>
         <div className="cheatsheet-history">
-          {history.map((_, i) => (
-            <div key={i} className="cheatsheet-version">
-              <span>Version {history.length - i}</span>
-              <span className="cheatsheet-version-tag">draft</span>
+          {history.length === 0 ? (
+            <div className="cheatsheet-history-empty">
+              <History size={12} /> No versions yet — every generation or edit is
+              saved here.
             </div>
-          ))}
+          ) : (
+            history.map((v, i) => (
+              <div
+                key={v.id}
+                className={`cheatsheet-version ${
+                  activeVersionId === v.id ? "is-active" : ""
+                }`}
+              >
+                <button
+                  type="button"
+                  className="cheatsheet-version-main"
+                  onClick={() => restoreVersion(v.id)}
+                  title={v.label}
+                >
+                  <span className="cheatsheet-version-label">
+                    v{history.length - i} · {v.label}
+                  </span>
+                  <span className="cheatsheet-version-tag">
+                    {new Date(v.createdAt).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </button>
+                <div className="cheatsheet-version-actions">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Restore"
+                    onClick={() => restoreVersion(v.id)}
+                  >
+                    <RotateCcw size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Delete"
+                    onClick={() => deleteVersion(v.id)}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
         <div className="cheatsheet-edit-composer">
           <input

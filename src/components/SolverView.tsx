@@ -409,14 +409,40 @@ function SolverResult({
   );
 }
 
+const THINKING_STEPS = [
+  "Reading the problem…",
+  "Identifying core concepts…",
+  "Setting up the equations…",
+  "Working through the steps…",
+  "Cross-checking the answer…",
+];
+
 function ThinkingProcess() {
+  const [stepIdx, setStepIdx] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStepIdx((i) => Math.min(i + 1, THINKING_STEPS.length - 1));
+    }, 1100);
+    return () => clearInterval(interval);
+  }, []);
   return (
     <div className="thinking-process">
       <div className="thinking-row">
-        <Sparkles size={14} />
+        <Sparkles size={14} className="thinking-spark" />
         <span>AI Thinking Process</span>
       </div>
-      <p className="thinking-detail">Understanding the problem…</p>
+      <ol className="thinking-steps">
+        {THINKING_STEPS.map((step, i) => {
+          const state =
+            i < stepIdx ? "done" : i === stepIdx ? "active" : "pending";
+          return (
+            <li key={step} className={`thinking-step is-${state}`}>
+              <span className="thinking-bullet" aria-hidden />
+              <span>{step}</span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

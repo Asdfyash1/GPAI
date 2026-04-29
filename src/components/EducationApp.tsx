@@ -15,6 +15,8 @@ import { ChatView } from "@/components/ChatView";
 import { CheatsheetView } from "@/components/CheatsheetView";
 import { VisualizerView } from "@/components/VisualizerView";
 import { DocumentView } from "@/components/DocumentView";
+import { NotebookView } from "@/components/NotebookView";
+import { PdfNotesView } from "@/components/PdfNotesView";
 
 type Theme = "dark" | "light";
 
@@ -202,33 +204,15 @@ export function EducationApp() {
             />
           )}
           {mode === "pdf-notes" && (
-            <DocumentView
-              mode="pdf-notes"
+            <PdfNotesView
               modelChoice={modelChoice}
               setModelChoice={setModelChoice}
-              title="Turn anything into structured notes"
-              subtitle="Upload a PDF or describe a topic — get takeaways, definitions, formulas, and likely exam questions."
-              placeholder="Upload PDF or enter topic"
-              quickPrompts={[
-                "Make notes from organic chemistry alkanes chapter",
-                "Summarize Newton's laws with key equations",
-                "Make exam-prep notes on photosynthesis",
-              ]}
             />
           )}
           {mode === "notebook" && (
-            <DocumentView
-              mode="notebook"
+            <NotebookView
               modelChoice={modelChoice}
               setModelChoice={setModelChoice}
-              title="Open a free-form study notebook"
-              subtitle="Drop ideas, derivations, and questions into a single workspace."
-              placeholder="Start a notebook entry"
-              quickPrompts={[
-                "Workspace on integration techniques",
-                "Workspace on DC circuit analysis",
-                "Workspace on linear algebra fundamentals",
-              ]}
             />
           )}
         </div>
