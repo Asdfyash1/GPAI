@@ -202,7 +202,6 @@ function SolverResult({
       <div className="solver-main">
         {result?.title && (
           <header className="result-header">
-            <span className="badge-pro">GPAI Pro</span>
             <h1 className="result-title">{result.title}</h1>
             <div className="result-meta">
               <span>{new Date(result.createdAt).toLocaleDateString()}</span>

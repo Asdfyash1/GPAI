@@ -4,11 +4,11 @@ const visionBaseUrl = "https://integrate.api.nvidia.com/v1/chat/completions";
 const visionModel = "mistralai/mistral-large-3-675b-instruct-2512";
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
-type NvidiaVisionContent =
+type VisionContent =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
-type NvidiaVisionResponse = {
+type VisionResponse = {
   choices?: Array<{
     message?: {
       content?: string;
@@ -35,7 +35,7 @@ async function describeImage(asset: UploadedAsset): Promise<string | undefined> 
     return "[Image too large for vision analysis — please upload a smaller image under 20 MB]";
   }
 
-  const content: NvidiaVisionContent[] = [
+  const content: VisionContent[] = [
     {
       type: "text",
       text:
@@ -71,20 +71,20 @@ async function describeImage(asset: UploadedAsset): Promise<string | undefined> 
   if (!response.ok) {
     let detail = response.statusText;
     try {
-      const errorBody = (await response.json()) as NvidiaVisionResponse;
+      const errorBody = (await response.json()) as VisionResponse;
       if (errorBody.error?.message) detail = errorBody.error.message;
     } catch {
       /* use statusText */
     }
     throw new Error(
-      `NVIDIA vision API returned ${response.status}: ${detail}`,
+      `Vision API returned ${response.status}: ${detail}`,
     );
   }
 
-  const data = (await response.json()) as NvidiaVisionResponse;
+  const data = (await response.json()) as VisionResponse;
   const text = data.choices?.[0]?.message?.content;
   if (!text) {
-    throw new Error("NVIDIA vision API returned an empty response");
+    throw new Error("Vision API returned an empty response");
   }
   return text;
 }

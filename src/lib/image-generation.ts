@@ -58,14 +58,14 @@ export async function generateScientificImage(options: {
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);
     throw new Error(
-      `NVIDIA image generation returned ${response.status}: ${text.slice(0, 240)}`,
+      `Image generation returned ${response.status}: ${text.slice(0, 240)}`,
     );
   }
 
   const data = (await response.json()) as FluxResponse;
   const base64 = data.artifacts?.[0]?.base64;
   if (!base64) {
-    throw new Error("NVIDIA image generation returned no artifact");
+    throw new Error("Image generation returned no artifact");
   }
   return `data:image/jpeg;base64,${base64}`;
 }

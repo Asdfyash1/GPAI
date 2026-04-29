@@ -20,7 +20,7 @@ import {
 import type { ModelChoice, UploadedAsset } from "@/types/education";
 
 const modelOptions: Array<{ id: ModelChoice; label: string }> = [
-  { id: "auto", label: "GPAI Pro Auto" },
+  { id: "auto", label: "Auto" },
   { id: "mistral-large", label: "Mistral Large 3" },
   { id: "nemotron", label: "Nemotron 49B" },
   { id: "deepseek-flash", label: "DeepSeek V4 Flash" },

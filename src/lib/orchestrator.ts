@@ -40,7 +40,7 @@ export function configuredProviders(): Provider[] {
 
   if (process.env.NVIDIA_API_KEY || process.env.NIM_API_KEY) {
     providers.push({
-      name: "NVIDIA NIM",
+      name: "Cloud",
       key: process.env.NVIDIA_API_KEY ?? process.env.NIM_API_KEY ?? "",
       baseURL: process.env.NVIDIA_BASE_URL ?? nvidiaBaseUrl,
       solverModel: process.env.NVIDIA_SOLVER_MODEL ?? nvidiaModelRoutes.auto,
@@ -111,7 +111,7 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
       role: "solver",
       status: "fallback",
       notes:
-        "No NVIDIA/API key configured; returned deterministic demo output with the same structure.",
+        "No API key configured; returned deterministic demo output with the same structure.",
     });
     return buildDemoResponse(request, verification);
   }
@@ -277,7 +277,7 @@ export async function streamChatResponse(options: {
 }
 
 async function demoStream(request: EducationRequest): Promise<StreamingHandle> {
-  const text = `# Demo response\n\nThis is a fallback because no NVIDIA / OpenAI-compatible API key is configured.\n\n## Problem\n${request.prompt}\n\n## Answer\nSet \`NVIDIA_API_KEY\` in \`.env.local\` to enable the real model.\n\n## Solution\nDeterministic demo output for the **${request.mode}** mode.`;
+  const text = `# Demo response\n\nThis is a fallback because no API key is configured.\n\n## Problem\n${request.prompt}\n\n## Answer\nConfigure an API key in \`.env.local\` to enable the real model.\n\n## Solution\nDeterministic demo output for the **${request.mode}** mode.`;
   return {
     textStream: chunked(text),
     text: Promise.resolve(text),
@@ -288,7 +288,7 @@ async function demoChatStream(options: {
   messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
 }): Promise<StreamingHandle> {
   const last = options.messages[options.messages.length - 1]?.content ?? "";
-  const text = `Demo mode (no API key configured). You said: "${last.slice(0, 200)}"\n\nSet \`NVIDIA_API_KEY\` in \`.env.local\` to enable real chat.`;
+  const text = `Demo mode (no API key configured). You said: "${last.slice(0, 200)}"\n\nConfigure an API key in \`.env.local\` to enable real chat.`;
   return {
     textStream: chunked(text),
     text: Promise.resolve(text),
