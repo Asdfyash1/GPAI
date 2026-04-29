@@ -13,7 +13,7 @@ import type {
 } from "@/types/education";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 type VisualizeBody = {
   prompt?: string;
