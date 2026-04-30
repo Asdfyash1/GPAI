@@ -165,7 +165,7 @@ export function Composer(props: ComposerProps) {
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*,application/pdf,.txt,.md,.csv"
+            accept="image/*,application/pdf,.txt,.md,.markdown,.csv,.tsv,.log,.json,.xml,.yaml,.yml,.html,.htm,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.rs,.rb,.php,.swift,.kt,.sql"
             onChange={(e: ChangeEvent<HTMLInputElement>) => onPickFiles(e.target.files)}
             hidden
           />

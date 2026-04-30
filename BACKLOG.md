@@ -52,7 +52,7 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 - [ ] **Solver: render Verification + Common-mistakes + Key-concepts sections inline,** not just at the end. The current `textbookSystemPrompt` prescribes order; verify the renderer respects it.
 - [ ] **Better empty states.** Sidebar Recent currently says "No items yet" — add a one-liner CTA like "Solve your first problem to see it here". Visualizer / Cheatsheet / Report empty states could be more inviting.
 - [ ] **Keyboard shortcuts.** `Cmd/Ctrl+K` for command palette / mode-switch, `Cmd/Ctrl+/` for help. Today there are none.
-- [ ] **Multimodal input.** Composer already accepts attachments; verify image OCR is firing and the extracted text is being injected into the prompt (see `analyzeUploadedImages` in `src/app/api/chat/route.ts`).
+- [x] **Multimodal input.** Composer accepts attachments and `analyzeUploadedImages` now extracts text from images (NVIDIA vision), PDFs (unpdf), and text-like files (UTF-8 decode). Extracted text is injected into the prompt via the existing `attachmentSummary` block in `src/lib/prompts.ts`.
 - [ ] **YouTube / web URL ingestion.** gpai.app composer footer says "Add PDF, image (JPG, PNG), website and Youtube link". Today we accept files; add URL paste that fetches the page (and YouTube transcript via `youtubetranscript`-style endpoint) and injects as context.
 - [ ] **Streaming "Thinking…" steps.** Already exists (`THINKING_STEPS` in `SolverView.tsx`); verify it actually advances during streaming, not just on a 1.1s timer.
 - [ ] **Better error messages.** Today a failed `/api/educate/stream` shows generic `error.message`. Surface friendlier "We couldn't reach the model — try again?" with a retry button.
@@ -89,6 +89,16 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 
 ## Changelog (append-only — every session adds an entry)
 
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — attachment ingest:**
+  - PDF and text-file uploads were silently broken — Composer accepted them but `analyzeUploadedImages` only filled `extractedText` for image MIME types.
+  - `src/lib/vision.ts` now also handles PDFs (via `unpdf` — same lib used by `/api/parse-pdf`) and text-like files (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.log`, source code) via UTF-8 decode of the data URL.
+  - Per-file limits: PDFs ≤ 25 MB, text files ≤ 2 MB, extracted text truncated to 12,000 chars with a `[…document truncated]` marker so the model still gets a coherent excerpt.
+  - Composer's `accept` attribute expanded to advertise the newly supported types.
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — quiz MCQ:**
+  - `/api/quiz` accepts a `format: "mcq" | "short" | "mixed"` field (default `mixed`). System prompt asks for a `choices` array of 4 plausible options on MCQ items with `answer` matching verbatim.
+  - Server-side validator only keeps `choices` when there are ≥3 options AND the answer matches one — otherwise gracefully falls back to short-answer.
+  - `<QuizItem>` renders MCQ items as A/B/C/D buttons. On click, the row locks, the correct option turns green, and (if user picked wrong) the wrong option turns red. "Try again" resets state.
+  - Right rail has a Format dropdown (Mixed / MCQ / Short answer).
 - **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — visualizer mermaid:**
   - Tighter visualize spec system prompt: strict Mermaid syntax rules (quote labels with `()` / `:` / `/`, ASCII-only IDs, 5-12 nodes, no markdown inside the diagram block).
   - Server-side `sanitizeMermaid()` auto-fixes the most common LLM mis-quotings before sending the spec back to the client.
