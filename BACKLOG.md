@@ -15,6 +15,31 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 
 ## Critical bug fixes (do these first if any regress)
 
+- [ ] **🚨 Image upload to AI Solver returns the WRONG answer.** Reproduced on 2026-04-30: uploading a 2.6 MB photo of a handwritten ODE `(D⁴ − 2D³ + D²) y = x³` produced a Solver answer about *electric potential of two charges* (`V_net = 2kQ/r`). The vision call ran ~3 min then the model hallucinated a problem because the failure mode silently feeds an `[Image analysis failed: ...]` string into the prompt and the LLM ignores it. **On the deployed Vercel preview the same submit just glitches back to the AI Solver hero** — almost certainly because the 2.6 MB base64 payload exceeds Vercel's 4.5 MB request body limit and/or the 60s function timeout for the vision call, so the request 413/504s and the client treats the abort as a reset. **Fix plan (single PR, multiple files):**
+  1. **Client-side image compression** in `src/components/Composer.tsx`. When a chosen image is `> 1 MB` or `> 1600 px` on its long edge, draw it onto a hidden `<canvas>`, downscale to 1600 px max edge, and re-encode as JPEG `q=0.85` before stuffing into the `dataUrl`. Cuts a 2.6 MB photo to ~250 KB. Keep PDFs/text untouched.
+  2. **Vision API timeout + smaller payload** in `src/lib/vision.ts`. Add an `AbortController` with a 45s deadline. Lower `max_tokens` from 2048 → 1024. Add an explicit error string that *names* the failure mode (`[Image analysis failed: timeout after 45s]` vs `[Image analysis failed: NVIDIA returned 429]`).
+  3. **Hard-stop hallucination** in `src/lib/prompts.ts` `buildTaskPrompt`. When ANY attachment carries an `extractedText` starting with `[Image analysis failed`, `[PDF parse failed`, or `[…too large`, prepend a directive to the user prompt: *"An attachment was provided but could not be read. Do NOT guess at the problem. Reply with: 'I couldn't read your attachment — please re-upload …' and nothing else."* The `textbook` / `solver` system prompts must also forbid inventing a problem when no problem text exists.
+  4. **Server-side body size guard** in `src/app/api/educate/stream/route.ts` and `src/app/api/educate/route.ts`. Reject `> 5 MB` payloads with HTTP 413 and a clear `{ error: "Attachment too large — please upload a smaller image (under 4 MB)." }` body that the client surfaces in a toast instead of "glitching back".
+  5. **Client error toast** in Composer / SolverView. When `/api/educate/stream` returns non-200, show an inline error in the Solver view (`Could not solve: <reason>`) instead of resetting state. Today the stream hook just resets and the user thinks the click did nothing.
+  - _Repro recording (failed run):_ saved to session attachments — solver answered electric-potential physics for the ODE image.
+  - _Test image used:_ `~/attachments/9300a84a-8b57-4f0e-8366-34903ce7b721/763a6d0e-5169-4e94-906f-3884c39a546a.png` (handwritten `(D⁴ − 2D³ + D²)y = x³`, 1.95 MB on disk, 2.6 MB as base64).
+  - _Pass criteria:_ on Vercel preview, uploading the same image → Solver streams a real solution that explicitly references the operator equation, gives `y_c = c₁ + c₂x + (c₃ + c₄x)e^x`, and computes a degree-5 particular integral for `x³`.
+
+- [ ] **🚨 Mobile print backstop missing in 3 of 4 print handlers.** Devin Review on PR #19 (already merged) flagged that `afterprint` doesn't always fire on mobile browsers, leaving `body[data-printing="document"|"notebook"|"pdf-notes"]` set forever, which means `@media print { *:not(...) { visibility: hidden } }` blanks the *entire app* until a full page reload. `CheatsheetView` already has a 4 s backstop; `DocumentView`, `NotebookView`, `PdfNotesView` do not. **Fix:** in each handler, replace
+  ```ts
+  window.addEventListener("afterprint", cleanup);
+  setTimeout(() => window.print(), 50);
+  ```
+  with
+  ```ts
+  window.addEventListener("afterprint", cleanup);
+  const backstop = setTimeout(cleanup, 4000); // mobile browsers may never fire afterprint
+  const oldCleanup = cleanup;
+  cleanup = () => { clearTimeout(backstop); oldCleanup(); };
+  requestAnimationFrame(() => window.print());
+  ```
+  _Files:_ `src/components/DocumentView.tsx`, `src/components/NotebookView.tsx`, `src/components/PdfNotesView.tsx`. Single small PR — branch was `devin/1777538776-print-backstop` (never finished).
+
 - [x] **AI Chat: "hi" no longer triggers a Pythagorean essay even with Deep Explain ON.** Default `deepExplain=false`, server-side `isTrivialMessage` gate switches to conversational system prompt + `maxOutputTokens: 256` for small-talk. _Files:_ `src/lib/orchestrator.ts:262-318`, `src/components/ChatView.tsx:35`, `src/lib/prompts.ts` (chat prompt explicitly forbids "Understanding the …" essay opener).
 - [x] **Mode tabs (AI Chat / Visualizer / More items) silently un-clickable when accessed via 127.0.0.1.** Next.js 16 dev server blocked HMR for any host other than `localhost`, leaving the page hydrated but with no event handlers — the page LOOKED rendered, but clicks went nowhere. _Fix:_ added `allowedDevOrigins: ["localhost", "127.0.0.1", "*.local"]` to `next.config.ts`. **Test by visiting `http://localhost:3000` (NOT `127.0.0.1`) AND `http://127.0.0.1:3000` — both must work.**
 - [x] **Web search overhaul: parallel fan-out + ranked results + numbered citations + Sources pill stack.** Replaced the sequential Wikipedia REST + DDG Instant Answer pipeline with a parallel fan-out across Wikipedia search API (action=query → REST summaries for top 3), DDG Instant Answer, and DDG HTML SERP (top 5 organic results with page-snippet enrichment via `fetchPageSnippet`). All sources run via `Promise.allSettled` with a 4-second per-source timeout. Results are deduped by canonical host+path and ranked: wikipedia > ddg-ia > page > ddg-serp, capped at 5. The system prompt now injects numbered `[1] (url) title -- snippet` citations and instructs the model to cite inline as `[1], [2], ...`. The chat route appends a `<!-- SOURCES:...:SOURCES -->` trailer to the stream; ChatView parses it and renders a Sources pill stack (favicon + host + link) under each reply. Route backwards-compat preserved (`urls: string[]` still returned). _Files:_ `src/lib/web-search.ts`, `src/app/api/web-search/route.ts`, `src/app/api/chat/route.ts`, `src/lib/orchestrator.ts:417-419`, `src/components/ChatView.tsx`, `src/app/globals.css`.
@@ -105,7 +130,32 @@ These are gpai.app gaps and outperform-opportunities that haven't been scoped in
 - **Quiz: spaced-repetition review queue.** Persist quiz results, surface "due for review" cards on the home screen.
 - **Settings page.** Today there's no place to switch model defaults, manage saved chats in bulk, or see remaining quota. Add a real `/settings` route.
 
+## Next-session priority order (read this first)
+
+If you only have a few hours, ship in this order — each one is independently small enough to be a single PR:
+
+1. **Image upload bug** (top of Critical bugs) — single biggest user-visible issue. Branch off `main` as `devin/<ts>-image-solver-fix`. Touch ~5 files. Test on Vercel preview by uploading the same handwritten ODE image.
+2. **Mobile print backstop** (second item in Critical bugs) — 4-line change × 3 files. Branch `devin/<ts>-print-backstop`.
+3. **Cross-device shareable URL `/api/publish`** — see Feature planning. Without this, `?taskId=` is useless across devices and "share" UX feels broken.
+4. **Light theme polish** — there's a topbar toggle but several views were dark-only. Audit `solver-view`, `chat`, `cheatsheet-page`, `notebook-page`, `visualizer-canvas` against `[data-theme="light"]`.
+5. **Visualizer SMILES rendering** for chemistry prompts.
+6. **Solver step-by-step reveal mode** (gpai.app does this; we dump all steps at once).
+7. Items 6-13 in Feature planning, in any order.
+
+After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="create")` after `git_pr(action="fetch_template")`. Wait for CI green via `git(action="pr_checks")`. Append a Changelog entry below and tick the BACKLOG checkbox in the same PR.
+
+## Open Devin Review findings (carry-over across sessions)
+
+- **PR #17 (solver follow-up thread, merged):** new Devin Review batch flagged 5+ additional findings on 2026-04-30. Not yet read or addressed. To inspect: `git(action="view_pr", repo="Asdfyash1/GPAI", pull_number=17)`.
+- **PR #19 (PDF export, merged):** print backstop finding — captured as the second Critical bug above.
+
 ## Changelog (append-only — every session adds an entry)
+
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — image-upload bug captured + remaining roadmap pushed:**
+  - Reproduced the image-upload regression locally: uploading a 2.6 MB photo of a handwritten ODE caused the Solver to answer a completely unrelated electric-potential problem (vision call ran ~3 min then the LLM hallucinated). On Vercel preview the same submit "glitches back" to the Solver hero — strongly indicates payload-size / function-timeout abort.
+  - Documented the 5-step fix plan as the top Critical bug entry (client-side compression, vision timeout, hallucination hard-stop in prompts, server-side body guard, error toast).
+  - Added "Next-session priority order" + "Open Devin Review findings" sections so the next session has a 1-screen handoff.
+  - Promoted the mobile print backstop (PR #19 review finding) into Critical bugs from the previous session's Feature planning slot.
 
 - **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — Visualizer fallback + Feature planning:**
   - When `/api/visualize` returns no parseable Mermaid block on the first spec call, do exactly one stricter retry asking for ONLY the mermaid code block. If that retry also fails for a non-illustration category, automatically run the Flux illustration pipeline so the canvas is never empty.
