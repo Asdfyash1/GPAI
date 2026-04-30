@@ -51,6 +51,12 @@ type ComposerProps = {
   ratioControl?: React.ReactNode;
   hint?: string;
   compact?: boolean;
+  /**
+   * If true, plain Enter sends and Shift+Enter inserts a newline
+   * (chat-style). If false (the default), Enter inserts a newline and
+   * Cmd/Ctrl+Enter sends (long-form prompt style).
+   */
+  enterToSend?: boolean;
 };
 
 export function Composer(props: ComposerProps) {
@@ -86,6 +92,12 @@ export function Composer(props: ComposerProps) {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter") return;
+    if (props.enterToSend && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      props.onSubmit();
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       props.onSubmit();
@@ -162,9 +174,15 @@ export function Composer(props: ComposerProps) {
               type="button"
               className={`pill-button ${props.webEnabled ? "is-active" : ""}`}
               onClick={() => props.onWebToggle?.(!props.webEnabled)}
-              title="Toggle web context"
+              title={
+                props.webEnabled
+                  ? "Web search is on — sources will be fetched and grounded into the answer"
+                  : "Turn on web search to ground answers in live web sources"
+              }
+              aria-pressed={props.webEnabled}
             >
               <Globe size={14} />
+              <span>Web search</span>
             </button>
           )}
           {props.showDeepExplain && (

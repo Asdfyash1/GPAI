@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import type {
+  ChatMessage,
+  ChatSession,
   EducationResponse,
   FeatureMode,
   ModelChoice,
@@ -23,6 +25,7 @@ type Theme = "dark" | "light";
 const HISTORY_KEY = "eduforge:history";
 const THEME_KEY = "eduforge:theme";
 const STORE_KEY = "eduforge:responses";
+const CHAT_STORE_KEY = "eduforge:chats";
 
 export function EducationApp() {
   const [mode, setMode] = useState<FeatureMode>("solver");
@@ -35,30 +38,63 @@ export function EducationApp() {
   const [history, setHistory] = useState<SidebarItem[]>([]);
   const [activeItem, setActiveItem] = useState<string | undefined>();
   const [responseStore, setResponseStore] = useState<Record<string, EducationResponse>>({});
+  const [chatSessions, setChatSessions] = useState<Record<string, ChatSession>>({});
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  // Mirrors `activeChatId` so that handlers invoked rapidly back-to-back
+  // (e.g. user message + streamed assistant message) see the freshly minted
+  // id even before React commits the setState. Without this, every
+  // streamed reply would mint a new chat session and create a duplicate
+  // sidebar entry.
+  const activeChatIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
   const [visualizerSeed, setVisualizerSeed] = useState<string>("");
+  // Persist-after-hydrate guard: until the initial localStorage load runs
+  // we MUST NOT write empty state back to disk, otherwise reloading the
+  // page wipes the user's history before it can be read.
+  const hydrated = useRef(false);
 
-  // Initial theme + history load (defer to next tick so React rule allows it)
+  // Initial localStorage hydrate. We mark `hydrated.current = true` BEFORE
+  // calling setState so the persist-after-hydrate effects below see the
+  // flag and don't overwrite the freshly-loaded values with the default
+  // empty state. Deferred to a microtask so React allows the setState.
   useEffect(() => {
     if (typeof window === "undefined") return;
     queueMicrotask(() => {
       const savedTheme = localStorage.getItem(THEME_KEY) as Theme | null;
+      let nextHistory: SidebarItem[] | null = null;
+      let nextStore: Record<string, EducationResponse> | null = null;
+      let nextChats: Record<string, ChatSession> | null = null;
+      const rawHistory = localStorage.getItem(HISTORY_KEY);
+      if (rawHistory) {
+        try {
+          nextHistory = JSON.parse(rawHistory) as SidebarItem[];
+        } catch {
+          /* ignore */
+        }
+      }
+      const rawStore = localStorage.getItem(STORE_KEY);
+      if (rawStore) {
+        try {
+          nextStore = JSON.parse(rawStore) as Record<string, EducationResponse>;
+        } catch {
+          /* ignore */
+        }
+      }
+      const rawChats = localStorage.getItem(CHAT_STORE_KEY);
+      if (rawChats) {
+        try {
+          nextChats = JSON.parse(rawChats) as Record<string, ChatSession>;
+        } catch {
+          /* ignore */
+        }
+      }
+      hydrated.current = true;
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
-      const savedHistory = localStorage.getItem(HISTORY_KEY);
-      if (savedHistory) {
-        try {
-          setHistory(JSON.parse(savedHistory) as SidebarItem[]);
-        } catch {
-          /* ignore */
-        }
-      }
-      const savedStore = localStorage.getItem(STORE_KEY);
-      if (savedStore) {
-        try {
-          setResponseStore(JSON.parse(savedStore) as Record<string, EducationResponse>);
-        } catch {
-          /* ignore */
-        }
-      }
+      if (nextHistory) setHistory(nextHistory);
+      if (nextStore) setResponseStore(nextStore);
+      if (nextChats) setChatSessions(nextChats);
     });
   }, []);
 
@@ -69,12 +105,12 @@ export function EducationApp() {
   }, [theme]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !hydrated.current) return;
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 25)));
   }, [history]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !hydrated.current) return;
     try {
       const ids = new Set(history.map((h) => h.id));
       const trimmed: Record<string, EducationResponse> = {};
@@ -83,9 +119,23 @@ export function EducationApp() {
       }
       localStorage.setItem(STORE_KEY, JSON.stringify(trimmed));
     } catch {
-      /* quota exceeded etc — best-effort persist */
+      /* quota exceeded etc \u2014 best-effort persist */
     }
   }, [responseStore, history]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !hydrated.current) return;
+    try {
+      const ids = new Set(history.filter((h) => h.mode === "chat").map((h) => h.id));
+      const trimmed: Record<string, ChatSession> = {};
+      for (const id of ids) {
+        if (chatSessions[id]) trimmed[id] = chatSessions[id];
+      }
+      localStorage.setItem(CHAT_STORE_KEY, JSON.stringify(trimmed));
+    } catch {
+      /* quota exceeded etc */
+    }
+  }, [chatSessions, history]);
 
   const onAddHistory = (response: EducationResponse) => {
     const item: SidebarItem = {
@@ -98,23 +148,95 @@ export function EducationApp() {
     setResponseStore((prev) => ({ ...prev, [response.id]: response }));
   };
 
+  const activeChatMessages: ChatMessage[] = useMemo(() => {
+    if (!activeChatId) return [];
+    return chatSessions[activeChatId]?.messages ?? [];
+  }, [activeChatId, chatSessions]);
+
+  const handleChatMessagesChange = (next: ChatMessage[]) => {
+    if (next.length === 0) {
+      // reset \u2014 don\u2019t persist an empty session
+      return;
+    }
+    let id = activeChatIdRef.current ?? activeChatId;
+    if (!id) {
+      id = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      activeChatIdRef.current = id;
+      setActiveChatId(id);
+    }
+    const firstUser = next.find((m) => m.role === "user");
+    const title =
+      firstUser?.content?.trim().slice(0, 60) || "New chat";
+    const now = new Date().toISOString();
+    setChatSessions((prev) => ({
+      ...prev,
+      [id!]: {
+        id: id!,
+        title,
+        messages: next,
+        createdAt: prev[id!]?.createdAt ?? now,
+        updatedAt: now,
+      },
+    }));
+    setHistory((prev) => {
+      const item: SidebarItem = { id: id!, title, mode: "chat" };
+      return [item, ...prev.filter((p) => p.id !== id)].slice(0, 25);
+    });
+    setActiveItem(id!);
+  };
+
   const handleNewTask = () => {
     setSolverPrompt("");
     setSolverResult(null);
     setActiveItem(undefined);
     setAttachments([]);
     setVisualizerSeed("");
+    activeChatIdRef.current = null;
+    setActiveChatId(null);
   };
 
   const handleSelectItem = (item: SidebarItem) => {
     setMode(item.mode);
     setActiveItem(item.id);
+    if (item.mode === "chat") {
+      activeChatIdRef.current = item.id;
+      setActiveChatId(item.id);
+      setSolverResult(null);
+      return;
+    }
+    activeChatIdRef.current = null;
+    setActiveChatId(null);
     const stored = responseStore[item.id];
     if (stored && stored.mode === "solver") {
       setSolverResult(stored);
       setSolverPrompt(stored.prompt);
     } else {
       setSolverResult(null);
+    }
+  };
+
+  const handleDeleteItem = (item: SidebarItem) => {
+    setHistory((prev) => prev.filter((h) => h.id !== item.id));
+    if (item.mode === "chat") {
+      setChatSessions((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      if (activeChatId === item.id) {
+        activeChatIdRef.current = null;
+        setActiveChatId(null);
+      }
+    } else {
+      setResponseStore((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      if (activeItem === item.id) {
+        setActiveItem(undefined);
+        setSolverResult(null);
+      }
     }
   };
 
@@ -131,6 +253,7 @@ export function EducationApp() {
         items={history}
         activeItemId={activeItem}
         onSelect={handleSelectItem}
+        onDelete={handleDeleteItem}
         onNewTask={handleNewTask}
         userLabel="hiyash04+asd1"
       />
@@ -170,8 +293,11 @@ export function EducationApp() {
           )}
           {mode === "chat" && (
             <ChatView
+              key={activeChatId ?? "new-chat"}
               modelChoice={modelChoice}
               setModelChoice={setModelChoice}
+              messages={activeChatMessages}
+              onMessagesChange={handleChatMessagesChange}
             />
           )}
           {mode === "cheatsheet" && (

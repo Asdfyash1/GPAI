@@ -1,5 +1,6 @@
 import { streamChatResponse } from "@/lib/orchestrator";
 import { analyzeUploadedImages } from "@/lib/vision";
+import { formatWebContext, searchWeb } from "@/lib/web-search";
 import type { ChatRequest, UploadedAsset } from "@/types/education";
 
 export const runtime = "nodejs";
@@ -35,6 +36,18 @@ export async function POST(request: Request) {
     }
   }
 
+  let webContext: string | undefined;
+  if (body.webEnabled && lastUser?.content) {
+    try {
+      const results = await searchWeb(lastUser.content, 5);
+      if (results.length > 0) {
+        webContext = formatWebContext(results);
+      }
+    } catch (err) {
+      console.error("[chat] web search failed:", err);
+    }
+  }
+
   const handle = await streamChatResponse({
     messages: incomingMessages.map((m) => ({
       role: m.role,
@@ -42,6 +55,7 @@ export async function POST(request: Request) {
     })),
     modelChoice: body.modelChoice ?? "auto",
     deepExplain: body.deepExplain ?? false,
+    webContext,
   });
 
   const encoder = new TextEncoder();

@@ -102,6 +102,15 @@ export type ChatRequest = {
   messages: Array<Pick<ChatMessage, "role" | "content"> & { attachments?: UploadedAsset[] }>;
   modelChoice: ModelChoice;
   deepExplain: boolean;
+  webEnabled?: boolean;
+};
+
+export type ChatSession = {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type VisualizeRequest = {
