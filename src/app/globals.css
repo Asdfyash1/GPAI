@@ -1445,6 +1445,19 @@ a {
   font-size: 13px;
 }
 
+.solver-error {
+  border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+.solver-error .section-heading {
+  color: var(--danger);
+}
+.solver-error-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 8px 0 12px;
+}
+
 /* streaming cursor */
 .streaming-cursor {
   display: inline-block;

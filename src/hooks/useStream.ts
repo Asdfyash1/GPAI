@@ -53,8 +53,20 @@ export function useStream<TFinal = unknown>() {
         });
 
         if (!response.ok || !response.body) {
-          const text = await response.text().catch(() => response.statusText);
-          throw new Error(text || `Request failed (${response.status})`);
+          let message = response.statusText || `Request failed (${response.status})`;
+          try {
+            const ct = response.headers.get("content-type") ?? "";
+            if (ct.includes("application/json")) {
+              const json = (await response.json()) as { error?: string };
+              if (json?.error) message = json.error;
+            } else {
+              const text = await response.text();
+              if (text) message = text;
+            }
+          } catch {
+            /* keep statusText */
+          }
+          throw new Error(message);
         }
 
         const reader = response.body.getReader();

@@ -98,7 +98,7 @@ export function SolverView(props: SolverViewProps) {
     );
   };
 
-  const showResults = stream.isStreaming || props.result || streamText;
+  const showResults = stream.isStreaming || props.result || streamText || stream.error;
 
   return (
     <div className="solver-view">
@@ -134,6 +134,10 @@ export function SolverView(props: SolverViewProps) {
           modelChoice={props.modelChoice}
           onVisualize={props.onVisualize}
           onAddHistory={props.onAddHistory}
+          onClearError={() => {
+            setStreamText("");
+            stream.reset();
+          }}
         />
       )}
     </div>
@@ -193,6 +197,7 @@ function SolverResult({
   modelChoice,
   onVisualize,
   onAddHistory,
+  onClearError,
 }: {
   streamText: string;
   isStreaming: boolean;
@@ -202,6 +207,7 @@ function SolverResult({
   modelChoice: ModelChoice;
   onVisualize: (prompt: string) => void;
   onAddHistory: (r: EducationResponse) => void;
+  onClearError: () => void;
 }) {
   const [tab, setTab] = useState<"followups" | "quiz">("followups");
   const [chatInput, setChatInput] = useState("");
@@ -348,9 +354,28 @@ function SolverResult({
 
   const text = result?.solution || streamText || "";
 
+  const showInlineError = !isStreaming && !result && error;
+
   return (
     <div className="solver-layout">
       <div className="solver-main">
+        {showInlineError && (
+          <section className="result-section solver-error" role="alert">
+            <h2 className="section-heading">Could not solve</h2>
+            <p>{error}</p>
+            <p className="solver-error-hint">
+              Try a smaller image (under 4 MB), a clearer photo, or paste the
+              problem as text.
+            </p>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={onClearError}
+            >
+              Back to composer
+            </button>
+          </section>
+        )}
         {result?.title && (
           <header className="result-header">
             <h1 className="result-title">{result.title}</h1>

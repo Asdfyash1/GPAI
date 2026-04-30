@@ -14,6 +14,8 @@ import type {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
+
 function isValidMode(mode: unknown) {
   return (
     mode === "solver" ||
@@ -24,6 +26,19 @@ function isValidMode(mode: unknown) {
 }
 
 export async function POST(request: Request) {
+  // Reject obviously oversized payloads before parsing so we don't waste a
+  // serverless invocation just to time out on a 10 MB image upload.
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BODY_BYTES) {
+    return Response.json(
+      {
+        error:
+          "Attachment too large — please upload a smaller image (under 4 MB) or a typed prompt.",
+      },
+      { status: 413 },
+    );
+  }
+
   let body: Partial<EducationRequest>;
   try {
     body = (await request.json()) as Partial<EducationRequest>;

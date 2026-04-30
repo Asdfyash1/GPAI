@@ -5,11 +5,24 @@ import type { EducationRequest } from "@/types/education";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
+
 function isValidMode(mode: unknown) {
   return mode === "solver" || mode === "visualizer" || mode === "chat" || mode === "cheatsheet";
 }
 
 export async function POST(request: Request) {
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BODY_BYTES) {
+    return Response.json(
+      {
+        error:
+          "Attachment too large — please upload a smaller image (under 4 MB) or a typed prompt.",
+      },
+      { status: 413 },
+    );
+  }
+
   let body: Partial<EducationRequest>;
   try {
     body = (await request.json()) as Partial<EducationRequest>;

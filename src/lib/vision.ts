@@ -6,6 +6,19 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_EXTRACTED_CHARS = 12_000;
+const VISION_TIMEOUT_MS = 45_000;
+const VISION_MAX_TOKENS = 1024;
+
+/**
+ * Marker prefix for any extractedText that represents a failure to read the
+ * attachment. The prompt builder uses this to switch the model into
+ * "don't hallucinate, ask the user to re-upload" mode.
+ */
+export const ATTACHMENT_FAILURE_PREFIX = "[ATTACHMENT_UNREADABLE]";
+
+function failureText(reason: string): string {
+  return `${ATTACHMENT_FAILURE_PREFIX} ${reason}`;
+}
 
 type VisionContent =
   | { type: "text"; text: string }
@@ -31,18 +44,20 @@ function visionApiKey() {
 
 async function describeImage(asset: UploadedAsset): Promise<string | undefined> {
   const key = visionApiKey();
-  if (!key) return "[Image uploaded but no vision API key configured]";
+  if (!key) return failureText("no vision API key configured on the server");
   if (!asset.dataUrl || !asset.type.startsWith("image/")) return undefined;
 
   if (asset.dataUrl.length > MAX_IMAGE_BYTES) {
-    return "[Image too large for vision analysis — please upload a smaller image under 20 MB]";
+    return failureText(
+      "image too large for vision analysis — please upload a smaller image (under 20 MB; ideally a JPEG under 4 MB)",
+    );
   }
 
   const content: VisionContent[] = [
     {
       type: "text",
       text:
-        "Extract and explain every visible educational detail from this image. Transcribe text, equations, labels, diagrams, units, and answer choices. Then summarize what problem the solver should answer.",
+        "Extract and explain every visible educational detail from this image. Transcribe all text, equations, labels, diagrams, units, and answer choices VERBATIM. Then summarize what problem the solver should answer. If the image is blurry, blank, or contains no recognizable academic content, say so explicitly — do NOT invent a problem.",
     },
     {
       type: "image_url",
@@ -52,24 +67,39 @@ async function describeImage(asset: UploadedAsset): Promise<string | undefined> 
     },
   ];
 
-  const response = await fetch(visionBaseUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: process.env.NVIDIA_VISION_MODEL ?? visionModel,
-      messages: [{ role: "user", content }],
-      max_tokens: 2048,
-      temperature: 0.15,
-      top_p: 1,
-      frequency_penalty: 0,
-      presence_penalty: 0,
-      stream: false,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(visionBaseUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.NVIDIA_VISION_MODEL ?? visionModel,
+        messages: [{ role: "user", content }],
+        max_tokens: VISION_MAX_TOKENS,
+        temperature: 0.15,
+        top_p: 1,
+        frequency_penalty: 0,
+        presence_penalty: 0,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if ((error as { name?: string })?.name === "AbortError") {
+      throw new Error(
+        `Vision API timed out after ${VISION_TIMEOUT_MS / 1000}s — image may be too large or NVIDIA is slow to respond`,
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     let detail = response.statusText;
@@ -173,7 +203,9 @@ export async function analyzeUploadedImages(attachments: UploadedAsset[]) {
         console.error(`[vision] Failed to analyze ${asset.name}:`, error);
         analyzed.push({
           ...asset,
-          extractedText: `[Image analysis failed: ${error instanceof Error ? error.message : "unknown error"}]`,
+          extractedText: failureText(
+            `image analysis failed for "${asset.name}": ${error instanceof Error ? error.message : "unknown error"}`,
+          ),
           dataUrl: undefined,
         });
       }
@@ -188,7 +220,9 @@ export async function analyzeUploadedImages(attachments: UploadedAsset[]) {
         console.error(`[vision] Failed to parse PDF ${asset.name}:`, error);
         analyzed.push({
           ...asset,
-          extractedText: `[PDF parse failed: ${error instanceof Error ? error.message : "unknown error"}]`,
+          extractedText: failureText(
+            `PDF parse failed for "${asset.name}": ${error instanceof Error ? error.message : "unknown error"}`,
+          ),
           dataUrl: undefined,
         });
       }
@@ -202,7 +236,9 @@ export async function analyzeUploadedImages(attachments: UploadedAsset[]) {
       } catch (error) {
         analyzed.push({
           ...asset,
-          extractedText: `[Text decode failed: ${error instanceof Error ? error.message : "unknown error"}]`,
+          extractedText: failureText(
+            `text decode failed for "${asset.name}": ${error instanceof Error ? error.message : "unknown error"}`,
+          ),
           dataUrl: undefined,
         });
       }
@@ -215,7 +251,9 @@ export async function analyzeUploadedImages(attachments: UploadedAsset[]) {
       ...asset,
       extractedText:
         asset.extractedText ??
-        `[File "${asset.name}" of type "${asset.type || "unknown"}" was attached but its contents are not yet extractable on the server. Ask the user to paste the relevant excerpt or convert to PDF / text.]`,
+        failureText(
+          `file "${asset.name}" of type "${asset.type || "unknown"}" cannot be read server-side — please paste the relevant excerpt or convert to PDF / text`,
+        ),
       dataUrl: undefined,
     });
   }
