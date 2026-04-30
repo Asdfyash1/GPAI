@@ -222,19 +222,10 @@ export function NotebookView({ modelChoice, setModelChoice }: NotebookViewProps)
                 <button
                   type="button"
                   className="icon-button"
-                  aria-label="Download markdown"
+                  aria-label="Download as PDF"
+                  title="Download as PDF"
                   disabled={!activePage.content}
-                  onClick={() => {
-                    const blob = new Blob([activePage.content], {
-                      type: "text/markdown",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `${activePage.title.replaceAll(/\s+/g, "-")}.md`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
+                  onClick={handlePrint}
                 >
                   <Download size={14} />
                 </button>

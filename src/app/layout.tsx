@@ -13,8 +13,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "eduForge | STEM Copilot",
-  description: "A high-performance educational STEM solver, visualizer, chat, and cheatsheet builder.",
+  title: "Forge — STEM Copilot",
+  description:
+    "Forge is a high-performance STEM copilot: solver, visualizer, chat, cheatsheet builder, report writer, PDF notes, and notebook in one workspace.",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+  },
 };
 
 export default function RootLayout({

@@ -11,7 +11,7 @@ export type SearchResult = {
 export type WebSearchResult = SearchResult;
 
 const USER_AGENT =
-  "eduForge/0.1 (educational; contact: support@eduforge.local)";
+  "Forge/0.1 (educational; contact: support@forge.local)";
 
 const SOURCE_TIMEOUT_MS = 4_000;
 

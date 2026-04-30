@@ -47,7 +47,7 @@ export function Sidebar({
               />
             </svg>
           </span>
-          {!collapsed && <span className="brand-name">eduForge</span>}
+          {!collapsed && <span className="brand-name">Forge</span>}
         </div>
         <button
           className="icon-button sidebar-toggle"

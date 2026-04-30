@@ -1,4 +1,4 @@
-# eduForge STEM Copilot
+# Forge — STEM Copilot
 
 A high-performance educational clone inspired by GPAI-style STEM workflows, built with a distinct UI and deployable on Vercel.
 
