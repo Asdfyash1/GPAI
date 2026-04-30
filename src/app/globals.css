@@ -2442,4 +2442,44 @@ a {
   body[data-printing="cheatsheet"] .katex {
     font-size: 1em !important;
   }
+
+  /* Document / Notebook / PDF-Notes / Report print mode — single column,
+     A4-friendly type. The Notebook view renders pages into the same
+     `.document-page` shell so one selector covers both. */
+  body[data-printing="document"] *:not(.document-page):not(.document-page *) {
+    visibility: hidden !important;
+  }
+  body[data-printing="document"] .document-page {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    transform: none !important;
+    background: white !important;
+    color: #111 !important;
+    font-size: 11pt;
+    line-height: 1.55;
+    visibility: visible !important;
+  }
+  body[data-printing="document"] .document-page * {
+    visibility: visible !important;
+    color: #111 !important;
+    background: transparent !important;
+  }
+  body[data-printing="document"] .document-page h1 {
+    font-size: 18pt;
+    margin-bottom: 8pt;
+  }
+  body[data-printing="document"] .document-page h2 {
+    font-size: 14pt;
+    margin-top: 14pt;
+  }
+  body[data-printing="document"] .document-page h3 {
+    font-size: 12pt;
+    margin-top: 10pt;
+  }
 }

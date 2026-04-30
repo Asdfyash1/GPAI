@@ -193,21 +193,16 @@ export function PdfNotesView({ modelChoice, setModelChoice }: PdfNotesViewProps)
               <button
                 type="button"
                 className="primary-button"
+                disabled={!content}
                 onClick={() => {
-                  const win = window.open("", "_blank");
-                  if (!win) return;
-                  win.document.write(`<!doctype html><html><head><title>${docTitle}</title>
-                    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
-                    <style>
-                    @page { size: A4; margin: 18mm; }
-                    body { font-family: -apple-system, system-ui, sans-serif; font-size: 11pt; line-height: 1.55; color: #111; }
-                    h1 { font-size: 18pt; }
-                    h2 { font-size: 14pt; margin-top: 14pt; }
-                    h3 { font-size: 12pt; margin-top: 10pt; }
-                    </style></head><body><h1>${docTitle}</h1><article>${content}</article></body></html>`);
-                  win.document.close();
-                  win.focus();
-                  win.print();
+                  if (!content) return;
+                  const cleanup = () => {
+                    document.body.removeAttribute("data-printing");
+                    window.removeEventListener("afterprint", cleanup);
+                  };
+                  window.addEventListener("afterprint", cleanup);
+                  document.body.setAttribute("data-printing", "document");
+                  setTimeout(() => window.print(), 50);
                 }}
               >
                 <Printer size={14} /> Print / PDF
