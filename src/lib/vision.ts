@@ -308,8 +308,6 @@ async function tryTesseract(asset: UploadedAsset): Promise<ProviderResult> {
   }
   const buffer = Buffer.from(bytes);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TESSERACT_TIMEOUT_MS);
   try {
     // Lazy-import keeps the WASM blob off the happy path's cold start.
     // tesseract.js v7 exposes `recognize` as a named export under ESM,
@@ -337,7 +335,27 @@ async function tryTesseract(asset: UploadedAsset): Promise<ProviderResult> {
         provider: "tesseract",
       };
     }
-    const { data } = await recognize(buffer, "eng", { logger: () => {} });
+
+    // tesseract.js does NOT accept an AbortSignal for single-call
+    // `recognize()`, so an AbortController would be inert. We race the
+    // recognition against a timeout so the caller gets a timely failure
+    // instead of hanging the serverless function. The WASM computation
+    // itself cannot be cancelled — it will still run to completion on the
+    // worker and eventually be GC'd, but we unblock the fallback chain
+    // and the HTTP response well before maxDuration.
+    const recognition = recognize(buffer, "eng", { logger: () => {} });
+    const timeout = new Promise<never>((_, reject) => {
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              `tesseract timed out after ${TESSERACT_TIMEOUT_MS / 1000}s`,
+            ),
+          ),
+        TESSERACT_TIMEOUT_MS,
+      );
+    });
+    const { data } = await Promise.race([recognition, timeout]);
     const text = (data?.text ?? "").trim();
     if (!text) {
       return {
@@ -356,16 +374,9 @@ async function tryTesseract(asset: UploadedAsset): Promise<ProviderResult> {
   } catch (error) {
     return {
       ok: false,
-      error:
-        (error as { name?: string })?.name === "AbortError"
-          ? `timed out after ${TESSERACT_TIMEOUT_MS / 1000}s`
-          : error instanceof Error
-            ? error.message
-            : "unknown error",
+      error: error instanceof Error ? error.message : "unknown error",
       provider: "tesseract",
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
