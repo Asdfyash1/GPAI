@@ -50,37 +50,51 @@ export function EducationApp() {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
   const [visualizerSeed, setVisualizerSeed] = useState<string>("");
+  // Persist-after-hydrate guard: until the initial localStorage load runs
+  // we MUST NOT write empty state back to disk, otherwise reloading the
+  // page wipes the user's history before it can be read.
+  const hydrated = useRef(false);
 
-  // Initial theme + history load (defer to next tick so React rule allows it)
+  // Initial localStorage hydrate. We mark `hydrated.current = true` BEFORE
+  // calling setState so the persist-after-hydrate effects below see the
+  // flag and don't overwrite the freshly-loaded values with the default
+  // empty state. Deferred to a microtask so React allows the setState.
   useEffect(() => {
     if (typeof window === "undefined") return;
     queueMicrotask(() => {
       const savedTheme = localStorage.getItem(THEME_KEY) as Theme | null;
+      let nextHistory: SidebarItem[] | null = null;
+      let nextStore: Record<string, EducationResponse> | null = null;
+      let nextChats: Record<string, ChatSession> | null = null;
+      const rawHistory = localStorage.getItem(HISTORY_KEY);
+      if (rawHistory) {
+        try {
+          nextHistory = JSON.parse(rawHistory) as SidebarItem[];
+        } catch {
+          /* ignore */
+        }
+      }
+      const rawStore = localStorage.getItem(STORE_KEY);
+      if (rawStore) {
+        try {
+          nextStore = JSON.parse(rawStore) as Record<string, EducationResponse>;
+        } catch {
+          /* ignore */
+        }
+      }
+      const rawChats = localStorage.getItem(CHAT_STORE_KEY);
+      if (rawChats) {
+        try {
+          nextChats = JSON.parse(rawChats) as Record<string, ChatSession>;
+        } catch {
+          /* ignore */
+        }
+      }
+      hydrated.current = true;
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
-      const savedHistory = localStorage.getItem(HISTORY_KEY);
-      if (savedHistory) {
-        try {
-          setHistory(JSON.parse(savedHistory) as SidebarItem[]);
-        } catch {
-          /* ignore */
-        }
-      }
-      const savedStore = localStorage.getItem(STORE_KEY);
-      if (savedStore) {
-        try {
-          setResponseStore(JSON.parse(savedStore) as Record<string, EducationResponse>);
-        } catch {
-          /* ignore */
-        }
-      }
-      const savedChats = localStorage.getItem(CHAT_STORE_KEY);
-      if (savedChats) {
-        try {
-          setChatSessions(JSON.parse(savedChats) as Record<string, ChatSession>);
-        } catch {
-          /* ignore */
-        }
-      }
+      if (nextHistory) setHistory(nextHistory);
+      if (nextStore) setResponseStore(nextStore);
+      if (nextChats) setChatSessions(nextChats);
     });
   }, []);
 
@@ -91,12 +105,12 @@ export function EducationApp() {
   }, [theme]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !hydrated.current) return;
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 25)));
   }, [history]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !hydrated.current) return;
     try {
       const ids = new Set(history.map((h) => h.id));
       const trimmed: Record<string, EducationResponse> = {};
@@ -110,7 +124,7 @@ export function EducationApp() {
   }, [responseStore, history]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !hydrated.current) return;
     try {
       const ids = new Set(history.filter((h) => h.mode === "chat").map((h) => h.id));
       const trimmed: Record<string, ChatSession> = {};
