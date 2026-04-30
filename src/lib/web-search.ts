@@ -2,7 +2,7 @@ export type WebSearchResult = {
   title: string;
   url: string;
   snippet: string;
-  source: "wikipedia" | "duckduckgo";
+  source: "wikipedia" | "duckduckgo" | "duckduckgo-html";
 };
 
 const USER_AGENT = "eduForge/0.1 (educational; contact: support@eduforge.local)";
@@ -93,6 +93,59 @@ async function searchDuckDuckGo(query: string, limit: number): Promise<WebSearch
   }
 }
 
+async function searchDuckDuckGoHtml(query: string, limit: number): Promise<WebSearchResult[]> {
+  const url = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        Accept: "text/html",
+      },
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const results: WebSearchResult[] = [];
+    const linkRe = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    const snippetRe = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+    const links: Array<{ url: string; title: string }> = [];
+    const snippets: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = linkRe.exec(html)) && links.length < limit * 2) {
+      let href = m[1];
+      // DDG HTML wraps real URLs in /l/?uddg=ENCODED
+      const uddg = href.match(/uddg=([^&]+)/);
+      if (uddg) {
+        try {
+          href = decodeURIComponent(uddg[1]);
+        } catch {
+          /* leave href as-is */
+        }
+      }
+      links.push({ url: href, title: stripHtml(m[2]) });
+    }
+    while ((m = snippetRe.exec(html)) && snippets.length < links.length) {
+      snippets.push(stripHtml(m[1]));
+    }
+    for (let i = 0; i < links.length && results.length < limit; i++) {
+      const { url: linkUrl, title } = links[i];
+      if (!linkUrl || !title) continue;
+      // Skip DDG-internal duckduckgo.com / ad links
+      if (/(^https?:\/\/duckduckgo\.com\/y\.js)|(^https?:\/\/duckduckgo\.com\/\?)/.test(linkUrl))
+        continue;
+      results.push({
+        title,
+        url: linkUrl,
+        snippet: snippets[i] ?? "",
+        source: "duckduckgo-html",
+      });
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
 export async function searchWeb(
   query: string,
   limit = 5,
@@ -113,6 +166,17 @@ export async function searchWeb(
       seen.add(r.url);
       merged.push(r);
       if (merged.length >= limit) break;
+    }
+    if (merged.length < Math.min(3, limit)) {
+      const html = await searchDuckDuckGoHtml(q, limit).catch(
+        () => [] as WebSearchResult[],
+      );
+      for (const r of html) {
+        if (!r.url || seen.has(r.url)) continue;
+        seen.add(r.url);
+        merged.push(r);
+        if (merged.length >= limit) break;
+      }
     }
     return merged;
   } catch (err) {
