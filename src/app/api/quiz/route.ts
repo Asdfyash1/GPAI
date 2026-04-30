@@ -14,6 +14,13 @@ type QuizRequest = {
   solutionContext?: string;
   count?: number;
   modelChoice?: ModelChoice;
+  /**
+   * "mcq" -> all questions return 4 plausible choices + correct answer that
+   * matches one of them verbatim.
+   * "short" -> short-answer recall (1-2 sentence answer, no choices).
+   * "mixed" (default) -> a mix of MCQ and short-answer in the same batch.
+   */
+  format?: "mcq" | "short" | "mixed";
 };
 
 type QuizResponse =
@@ -32,6 +39,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "prompt required" }, { status: 400 });
   }
   const count = Math.min(Math.max(body.count ?? 5, 1), 8);
+  const format: "mcq" | "short" | "mixed" = body.format ?? "mixed";
 
   const providers = configuredProviders();
   if (providers.length === 0) {
@@ -45,12 +53,22 @@ export async function POST(request: Request): Promise<Response> {
   const modelName =
     requested === "local-demo" ? provider.solverModel : requested;
 
+  const formatRule =
+    format === "mcq"
+      ? "EVERY question must include a `choices` array of EXACTLY 4 plausible options, with `answer` matching one of those options verbatim. Use realistic distractors (close-but-wrong values, common misconceptions). Do NOT mark the correct option in the `choices` array — just put the correct option text in `answer`."
+      : format === "short"
+        ? "Do NOT use multiple choice. Each question must be answerable in <=2 sentences."
+        : "Make about half of the questions multiple-choice (with a `choices` array of EXACTLY 4 options and `answer` matching one of them verbatim) and the other half short-answer (no `choices` field, answerable in <=2 sentences). Use realistic distractors for the MCQs.";
+
   const system =
     "You are a STEM teacher who writes short, focused review quizzes. " +
     "Output ONLY valid JSON in this exact shape: " +
-    '{"quiz":[{"question":"...","answer":"..."},{"question":"...","answer":"..."}]}. ' +
-    "Each question must be answerable in <=2 sentences and directly related to the user's problem. " +
-    "Mix concept recall, formula application, and short calculation. Do NOT use multiple choice. Do NOT include explanations outside the JSON object.";
+    '{"quiz":[{"question":"...","answer":"...","choices":["A","B","C","D"]}]}. ' +
+    "The `choices` field is OPTIONAL per item: include it for multiple-choice questions, omit it for short-answer questions. " +
+    "Each question must be directly related to the user's problem and grounded in the reference solution if provided. " +
+    "Mix concept recall, formula application, and short calculation. " +
+    formatRule +
+    " Do NOT include explanations or any text outside the JSON object.";
 
   const userPrompt = [
     `Problem:\n${prompt}`,
@@ -87,7 +105,13 @@ export async function POST(request: Request): Promise<Response> {
     return raw.trim();
   })();
 
-  let parsed: { quiz?: Array<{ question?: unknown; answer?: unknown }> };
+  let parsed: {
+    quiz?: Array<{
+      question?: unknown;
+      answer?: unknown;
+      choices?: unknown;
+    }>;
+  };
   try {
     parsed = JSON.parse(jsonText);
   } catch {
@@ -97,10 +121,27 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
   const quiz: PracticeItem[] = (parsed.quiz ?? [])
-    .map((q) => ({
-      question: typeof q.question === "string" ? q.question : "",
-      answer: typeof q.answer === "string" ? q.answer : "",
-    }))
+    .map((q) => {
+      const question = typeof q.question === "string" ? q.question : "";
+      // Trim the answer symmetrically with choices so an LLM's stray
+      // whitespace ("  9.8 m/s²  " vs choice "9.8 m/s²") doesn't make
+      // a valid MCQ silently degrade to short-answer.
+      const answer = typeof q.answer === "string" ? q.answer.trim() : "";
+      const rawChoices = Array.isArray(q.choices) ? q.choices : null;
+      const choices = rawChoices
+        ?.map((c) => (typeof c === "string" ? c.trim() : ""))
+        .filter((c): c is string => c.length > 0);
+      // Only keep `choices` if there are 3+ options AND the answer matches
+      // one of them (otherwise the model produced a malformed MCQ; degrade
+      // gracefully to short-answer rather than rendering broken radios).
+      const validChoices =
+        choices && choices.length >= 3 && choices.includes(answer)
+          ? choices
+          : undefined;
+      return validChoices
+        ? { question, answer, choices: validChoices }
+        : { question, answer };
+    })
     .filter((q) => q.question && q.answer)
     .slice(0, count);
 

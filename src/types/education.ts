@@ -73,6 +73,12 @@ export type SolutionStep = {
 export type PracticeItem = {
   question: string;
   answer: string;
+  /**
+   * Optional multiple-choice options. When present, the UI renders the
+   * question as an MCQ; the entry in `answer` is the correct option text
+   * (must match one of the strings in `choices` exactly).
+   */
+  choices?: string[];
 };
 
 export type EducationResponse = {
