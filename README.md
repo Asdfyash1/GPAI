@@ -77,6 +77,14 @@ npm run build
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This project is Vercel-ready out of the box. To deploy:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Push this repo to GitHub (or import directly into Vercel from the dashboard).
+2. In Vercel → Project → Settings → Environment Variables, add at minimum:
+   - `NVIDIA_API_KEY` — your NVIDIA NIM key (required for live model calls; the app falls back to deterministic demo output without it)
+   - Optionally any of the model overrides listed in the **Environment** section above (e.g. `NVIDIA_SOLVER_MODEL`, `NVIDIA_VISION_API_KEY`)
+3. Click **Deploy**. No `vercel.json` is required — Next.js 16 + Turbopack are detected automatically.
+
+All API routes (`/api/educate`, `/api/educate/stream`, `/api/chat`, `/api/visualize`, `/api/parse-pdf`) run on the Node.js runtime with `maxDuration = 60`s, which works on the Vercel Hobby plan. Upgrade to Pro if you need longer timeouts for very large generations.
+
+PDF parsing uses [`unpdf`](https://www.npmjs.com/package/unpdf), which is pure-JS and works on Vercel without any native binary. Mermaid diagrams are rendered fully on the client.
