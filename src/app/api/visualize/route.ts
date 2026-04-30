@@ -141,11 +141,38 @@ export async function POST(request: Request) {
       qualityChecks = matchBullets(matchSection(md, "Quality checks"));
       const rawMermaid = extractMermaid(md);
       diagramSpec = rawMermaid ? sanitizeMermaid(rawMermaid) : undefined;
+
+      // If the model omitted the mermaid block (or it was empty) and we
+      // were expecting one, do exactly one stricter retry that asks for
+      // ONLY the mermaid block. This is much cheaper than failing over
+      // to the image-generation pipeline.
+      const wantMermaid = category !== "illustration" && category !== "chemistry";
+      if (!diagramSpec && wantMermaid) {
+        try {
+          const retry = await generateText({
+            model: buildLanguageModel(
+              primary,
+              modelName === "local-demo" ? primary.solverModel : modelName,
+            ),
+            system: `You produce ONLY a Mermaid code block — nothing else. Pick the right diagram type for the topic (flowchart TD/LR, graph LR, sequenceDiagram, classDiagram, stateDiagram-v2). 5-12 nodes. Quote any label containing parentheses, colons or slashes. Only ASCII identifiers. No prose, no markdown headings, no explanation — just the \`\`\`mermaid block.`,
+            prompt: body.prompt,
+            temperature: 0.2,
+            maxOutputTokens: 400,
+          });
+          const retryRaw = extractMermaid(retry.text);
+          if (retryRaw) diagramSpec = sanitizeMermaid(retryRaw);
+        } catch {
+          // ignore - we'll fall through to the illustration path below
+        }
+      }
+
       verification.push({
         model: `Cloud:${modelName}`,
         role: "visualizer",
         status: "complete",
-        notes: "Generated visual specification.",
+        notes: diagramSpec
+          ? "Generated visual specification."
+          : "Spec OK but no parseable diagram block.",
       });
     } catch (error) {
       verification.push({
@@ -157,8 +184,16 @@ export async function POST(request: Request) {
     }
   }
 
+  // For non-illustration categories we normally rely on the Mermaid
+  // diagram. But if Mermaid extraction failed (e.g. the LLM returned
+  // prose only, or the only block was unparseable) we don't want the
+  // user staring at the description text — fall back to the
+  // illustration pipeline so they always see *some* visual.
+  const usingFallback: boolean = style !== "illustration" && !diagramSpec;
+  const needIllustration: boolean = style === "illustration" || usingFallback;
+
   let imageDataUrl: string | undefined;
-  if (style === "illustration") {
+  if (needIllustration) {
     try {
       imageDataUrl = await generateScientificImage({
         prompt: `${categoryStylePrefix(category)}${body.prompt}. White background, clean lines, educational style, no watermark.`,
@@ -169,7 +204,9 @@ export async function POST(request: Request) {
         role: "visualizer",
         status: imageDataUrl ? "complete" : "fallback",
         notes: imageDataUrl
-          ? "Generated scientific illustration."
+          ? usingFallback
+            ? "Diagram spec missing — fell back to scientific illustration."
+            : "Generated scientific illustration."
           : "Image generation skipped (no key).",
       });
     } catch (error) {
