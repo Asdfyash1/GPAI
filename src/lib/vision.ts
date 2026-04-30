@@ -343,9 +343,15 @@ async function tryTesseract(asset: UploadedAsset): Promise<ProviderResult> {
     // itself cannot be cancelled — it will still run to completion on the
     // worker and eventually be GC'd, but we unblock the fallback chain
     // and the HTTP response well before maxDuration.
+    //
+    // The timer handle is cleared in a finally block so the Node event
+    // loop doesn't stay alive for the full TESSERACT_TIMEOUT_MS after
+    // recognition wins the race (matters on Vercel billing and for the
+    // standalone test scripts in scripts/).
     const recognition = recognize(buffer, "eng", { logger: () => {} });
+    let timerId: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      setTimeout(
+      timerId = setTimeout(
         () =>
           reject(
             new Error(
@@ -355,7 +361,13 @@ async function tryTesseract(asset: UploadedAsset): Promise<ProviderResult> {
         TESSERACT_TIMEOUT_MS,
       );
     });
-    const { data } = await Promise.race([recognition, timeout]);
+    let raceResult: { data: { text?: string } };
+    try {
+      raceResult = await Promise.race([recognition, timeout]);
+    } finally {
+      if (timerId !== undefined) clearTimeout(timerId);
+    }
+    const { data } = raceResult;
     const text = (data?.text ?? "").trim();
     if (!text) {
       return {
