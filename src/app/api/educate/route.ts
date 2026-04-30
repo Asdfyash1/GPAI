@@ -8,7 +8,15 @@ export const maxDuration = 60;
 const MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
 
 function isValidMode(mode: unknown) {
-  return mode === "solver" || mode === "visualizer" || mode === "chat" || mode === "cheatsheet";
+  return (
+    mode === "solver" ||
+    mode === "visualizer" ||
+    mode === "chat" ||
+    mode === "cheatsheet" ||
+    mode === "report" ||
+    mode === "pdf-notes" ||
+    mode === "notebook"
+  );
 }
 
 export async function POST(request: Request) {

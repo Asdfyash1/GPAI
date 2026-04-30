@@ -21,7 +21,10 @@ function isValidMode(mode: unknown) {
     mode === "solver" ||
     mode === "visualizer" ||
     mode === "chat" ||
-    mode === "cheatsheet"
+    mode === "cheatsheet" ||
+    mode === "report" ||
+    mode === "pdf-notes" ||
+    mode === "notebook"
   );
 }
 
