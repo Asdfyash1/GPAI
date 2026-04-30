@@ -2122,6 +2122,10 @@ a {
 /* ===========  PRINT (cheatsheet/document fallback) ============ */
 
 @media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
   .sidebar,
   .workspace-topbar,
   .composer,
@@ -2131,7 +2135,45 @@ a {
     display: none !important;
   }
   body {
-    background: white;
+    background: white !important;
+    color: #111 !important;
+  }
+  /* When printing the cheatsheet, hide everything except the page itself
+     and reflow it to fit A4 with safe margins. */
+  body[data-printing="cheatsheet"] *:not(.cheatsheet-page):not(.cheatsheet-page *) {
+    visibility: hidden !important;
+  }
+  body[data-printing="cheatsheet"] .cheatsheet-page {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    transform: none !important;
+    columns: 2;
+    column-gap: 14mm;
+    font-size: 9pt;
+    line-height: 1.35;
     color: #111;
+    visibility: visible !important;
+  }
+  body[data-printing="cheatsheet"] .cheatsheet-page * {
+    visibility: visible !important;
+  }
+  body[data-printing="cheatsheet"] .cheatsheet-page h1 {
+    font-size: 14pt;
+  }
+  body[data-printing="cheatsheet"] .cheatsheet-page h2 {
+    font-size: 11pt;
+    margin-top: 6pt;
+  }
+  body[data-printing="cheatsheet"] .cheatsheet-page h3 {
+    font-size: 10pt;
+  }
+  body[data-printing="cheatsheet"] .katex {
+    font-size: 1em !important;
   }
 }
