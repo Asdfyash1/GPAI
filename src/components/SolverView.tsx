@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   ArrowUp,
   CheckCircle2,
+  Clock,
   Copy,
+  XCircle,
   Download,
   Eye,
   EyeOff,
@@ -237,9 +240,7 @@ function SolverResult({
           <section className="result-section">
             <div className="section-row">
               <h2 className="section-heading">Answer</h2>
-              <span className="cross-checked-badge">
-                <CheckCircle2 size={14} /> Cross-checked
-              </span>
+              <CrossCheckBadge result={result} />
             </div>
             <div className="answer-card">
               <MathMarkdown content={result.answer} />
@@ -416,6 +417,70 @@ const THINKING_STEPS = [
   "Working through the steps…",
   "Cross-checking the answer…",
 ];
+
+function CrossCheckBadge({ result }: { result: EducationResponse }) {
+  const cc = result.crossCheck;
+  if (!cc) {
+    return (
+      <span
+        className="cross-checked-badge cross-checked-pending"
+        title="Cross-check is running…"
+      >
+        <Clock size={14} /> Verifying
+      </span>
+    );
+  }
+  if (cc.status === "agree") {
+    const tooltip = `Cross-checked by ${cc.secondaryModel}: both models reached the same conclusion.`;
+    return (
+      <span
+        className="cross-checked-badge cross-checked-pass"
+        title={tooltip}
+      >
+        <CheckCircle2 size={14} /> Cross-checked
+      </span>
+    );
+  }
+  if (cc.status === "minor") {
+    const tooltip = [
+      `Models gave equivalent answers up to rounding/units.`,
+      `Primary (${cc.primaryModel}): ${cc.primaryAnswer ?? "(see solution)"}`,
+      `Secondary (${cc.secondaryModel}): ${cc.secondaryAnswer ?? "(see notes)"}`,
+    ].join("\n");
+    return (
+      <span
+        className="cross-checked-badge cross-checked-minor"
+        title={tooltip}
+      >
+        <AlertTriangle size={14} /> Minor mismatch
+      </span>
+    );
+  }
+  if (cc.status === "disagree") {
+    const tooltip = [
+      `Models disagreed on the final answer.`,
+      `Primary (${cc.primaryModel}): ${cc.primaryAnswer ?? "(see solution)"}`,
+      `Secondary (${cc.secondaryModel}): ${cc.secondaryAnswer ?? "(see notes)"}`,
+    ].join("\n");
+    return (
+      <span
+        className="cross-checked-badge cross-checked-fail"
+        title={tooltip}
+      >
+        <XCircle size={14} /> Models disagree
+      </span>
+    );
+  }
+  // skipped
+  return (
+    <span
+      className="cross-checked-badge cross-checked-skipped"
+      title={cc.notes ?? "Cross-check skipped."}
+    >
+      <Clock size={14} /> Cross-check skipped
+    </span>
+  );
+}
 
 function ThinkingProcess() {
   const [stepIdx, setStepIdx] = useState(0);

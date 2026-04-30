@@ -1,4 +1,7 @@
-import { streamEducationalSolverDraft } from "@/lib/orchestrator";
+import {
+  runCrossCheckOnAnswer,
+  streamEducationalSolverDraft,
+} from "@/lib/orchestrator";
 import { analyzeUploadedImages } from "@/lib/vision";
 import { parseModelResponse } from "@/lib/response-parser";
 import { STRUCTURED_TAIL_SENTINEL } from "@/lib/streaming-protocol";
@@ -71,6 +74,26 @@ export async function POST(request: Request) {
           fullRequest,
           verification,
         );
+
+        if (fullRequest.crossCheck && fullRequest.mode === "solver") {
+          try {
+            parsed.crossCheck = await runCrossCheckOnAnswer(
+              fullRequest,
+              parsed.answer || aggregated,
+            );
+            verification.push({
+              model: parsed.crossCheck.secondaryModel,
+              role: "critic",
+              status:
+                parsed.crossCheck.status === "skipped" ? "skipped" : "complete",
+              notes:
+                parsed.crossCheck.notes ??
+                `Cross-check verdict: ${parsed.crossCheck.status}.`,
+            });
+          } catch (error) {
+            console.error("[educate/stream] cross-check failed:", error);
+          }
+        }
 
         controller.enqueue(encoder.encode(STRUCTURED_TAIL_SENTINEL));
         controller.enqueue(encoder.encode(JSON.stringify(parsed)));
