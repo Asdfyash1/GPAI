@@ -107,6 +107,17 @@ These are gpai.app gaps and outperform-opportunities that haven't been scoped in
 
 ## Changelog (append-only — every session adds an entry)
 
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — Visualizer fallback + Feature planning:**
+  - When `/api/visualize` returns no parseable Mermaid block on the first spec call, do exactly one stricter retry asking for ONLY the mermaid code block. If that retry also fails for a non-illustration category, automatically run the Flux illustration pipeline so the canvas is never empty.
+  - Added a "Feature planning" section to BACKLOG.md tracking proposals (cross-device share, light theme, SMILES, step-by-step reveal, image-output chat, per-section cheatsheet regen, responsive pass, print backstop timeout, voice / inkboard input, notebook folders, spaced-repetition review, /settings).
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — Report / Notebook / PDF-Notes export:**
+  - Replaced popup-based print path in `DocumentView`, `NotebookView`, and `PdfNotesView` with the same `window.print()` + `data-printing="document"` marker pattern Cheatsheet already uses.
+  - Added an `@media print` block scoped to `body[data-printing="document"] .document-page` that hides the rest of the chrome, forces white background + `#111` text on every descendant (so dark-theme colours don't survive into the printed page), and reflows headings to A4-friendly point sizes.
+  - Print/PDF buttons now disable when there's no streamed content.
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — solver follow-up thread:**
+  - Right-rail chips and "Ask about this problem" input no longer wipe the solver view. They call `sendFollowUp(question)` which streams a response from `/api/chat` into a Q&A timeline anchored under the answer.
+  - Stale-closure fix on the streaming-update index: `nextIdxRef` hands out unique stable indices and a `threadRef` mirror feeds the prior-turns primer so concurrent follow-ups don't corrupt each other's streams.
+  - Chips / input / Send disabled while any turn is streaming.
 - **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — attachment ingest:**
   - PDF and text-file uploads were silently broken — Composer accepted them but `analyzeUploadedImages` only filled `extractedText` for image MIME types.
   - `src/lib/vision.ts` now also handles PDFs (via `unpdf` — same lib used by `/api/parse-pdf`) and text-like files (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.log`, source code) via UTF-8 decode of the data URL.
