@@ -10,6 +10,38 @@ import { Composer } from "@/components/Composer";
 import { MathMarkdown } from "@/components/MathMarkdown";
 import { useStream } from "@/hooks/useStream";
 
+type SourceItem = {
+  title: string;
+  url: string;
+  snippet: string;
+  source: string;
+};
+
+const SOURCES_RE = /<!-- SOURCES:([\s\S]*?):SOURCES -->/;
+
+function extractSources(text: string): {
+  content: string;
+  sources: SourceItem[];
+} {
+  const m = text.match(SOURCES_RE);
+  if (!m) return { content: text, sources: [] };
+  const content = text.replace(SOURCES_RE, "").trimEnd();
+  try {
+    const sources = JSON.parse(m[1]) as SourceItem[];
+    return { content, sources };
+  } catch {
+    return { content, sources: [] };
+  }
+}
+
+function hostFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 type ChatViewProps = {
   modelChoice: ModelChoice;
   setModelChoice: (m: ModelChoice) => void;
@@ -197,6 +229,39 @@ function UserBubble({ message }: { message: ChatMessage }) {
   );
 }
 
+function SourcesPills({ sources }: { sources: SourceItem[] }) {
+  if (sources.length === 0) return null;
+  return (
+    <div className="sources-pills">
+      <span className="sources-label">Sources</span>
+      {sources.map((s, i) => {
+        const host = hostFromUrl(s.url);
+        return (
+          <a
+            key={i}
+            href={s.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="source-pill"
+            title={s.title}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`https://www.google.com/s2/favicons?domain=${host}&sz=32`}
+              alt=""
+              className="source-favicon"
+              width={16}
+              height={16}
+            />
+            <span className="source-host">{host}</span>
+            <span className="source-index">[{i + 1}]</span>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 function AssistantBlock({
   content,
   streaming,
@@ -204,12 +269,14 @@ function AssistantBlock({
   content: string;
   streaming?: boolean;
 }) {
+  const { content: visibleContent, sources } = extractSources(content);
   return (
     <div className="chat-row chat-row-assistant">
       <div className="assistant-content">
-        <MathMarkdown content={content} />
+        <MathMarkdown content={visibleContent} />
         {streaming && <span className="streaming-cursor" aria-hidden />}
       </div>
+      {!streaming && <SourcesPills sources={sources} />}
     </div>
   );
 }

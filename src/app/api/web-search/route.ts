@@ -23,5 +23,10 @@ export async function POST(request: Request) {
 
   const limit = Math.max(1, Math.min(10, body.limit ?? 5));
   const results = await searchWeb(query, limit);
-  return Response.json({ query, results });
+
+  return Response.json({
+    query,
+    results,
+    urls: results.map((r) => r.url),
+  });
 }

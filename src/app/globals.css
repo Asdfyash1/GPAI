@@ -1347,6 +1347,64 @@ a {
   color: var(--ink);
 }
 
+/* Sources pill stack */
+.sources-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-left: 2px;
+}
+
+.sources-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted, #888);
+  margin-right: 2px;
+}
+
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 6px;
+  border-radius: 999px;
+  background: var(--bg-elev, #1e1e2e);
+  border: 1px solid var(--border, #333);
+  font-size: 12px;
+  color: var(--ink, #ccc);
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+  cursor: pointer;
+}
+.source-pill:hover {
+  border-color: var(--accent, #4f8cff);
+  background: var(--bg-hover, #252538);
+}
+
+.source-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.source-host {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-index {
+  font-size: 10px;
+  opacity: 0.55;
+  margin-left: 1px;
+}
+
 .bubble-attachments {
   display: flex;
   gap: 6px;
