@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowUp,
@@ -209,17 +209,32 @@ function SolverResult({
   const [quizError, setQuizError] = useState<string | null>(null);
   // In-context follow-up thread anchored to this solve. Each entry is a
   // Q/A pair; the answer streams in chunk-by-chunk into `a`.
-  const [thread, setThread] = useState<
-    Array<{ q: string; a: string; isStreaming: boolean; error?: string }>
-  >([]);
+  type ThreadTurn = {
+    q: string;
+    a: string;
+    isStreaming: boolean;
+    error?: string;
+  };
+  const [thread, setThread] = useState<ThreadTurn[]>([]);
+  // Mirror state into a ref so concurrent invocations of sendFollowUp
+  // (e.g. user double-clicks chips before the first request resolves)
+  // see the latest thread without going through React's render cycle.
+  // `nextIdxRef` hands out unique stable indices for the streaming
+  // updaters; `threadRef` lets us build the prior-turns primer from
+  // the freshest data even while a previous answer is still streaming.
+  const threadRef = useRef<ThreadTurn[]>([]);
+  const nextIdxRef = useRef(0);
+  useEffect(() => {
+    threadRef.current = thread;
+  }, [thread]);
 
   const sendFollowUp = async (question: string) => {
     const q = question.trim();
     if (!q || !result) return;
-    const idx = thread.length;
+    const idx = nextIdxRef.current++;
     setThread((prev) => [...prev, { q, a: "", isStreaming: true }]);
 
-    const prior = thread
+    const prior = threadRef.current
       .map((t) => `User: ${t.q}\nAssistant: ${t.a}`)
       .join("\n\n");
     const primer = [
@@ -287,6 +302,8 @@ function SolverResult({
       );
     }
   };
+
+  const isFollowUpInFlight = thread.some((t) => t.isStreaming);
 
   const handleGenerateQuiz = async () => {
     if (!result) return;
@@ -450,7 +467,7 @@ function SolverResult({
                   type="button"
                   className="chip"
                   onClick={() => sendFollowUp(chip)}
-                  disabled={!result}
+                  disabled={!result || isFollowUpInFlight}
                 >
                   {chip}
                 </button>
@@ -473,6 +490,7 @@ function SolverResult({
                     type="button"
                     className="chip"
                     onClick={() => sendFollowUp(f)}
+                    disabled={isFollowUpInFlight}
                   >
                     {f}
                   </button>
@@ -505,11 +523,20 @@ function SolverResult({
               <input
                 type="text"
                 className="rail-input"
-                placeholder="Ask about this problem"
+                placeholder={
+                  isFollowUpInFlight
+                    ? "Waiting for response…"
+                    : "Ask about this problem"
+                }
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
+                disabled={isFollowUpInFlight}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && chatInput.trim()) {
+                  if (
+                    e.key === "Enter" &&
+                    chatInput.trim() &&
+                    !isFollowUpInFlight
+                  ) {
                     sendFollowUp(chatInput);
                     setChatInput("");
                   }
@@ -518,8 +545,9 @@ function SolverResult({
               <button
                 type="button"
                 className="icon-button"
+                disabled={isFollowUpInFlight}
                 onClick={() => {
-                  if (!chatInput.trim()) return;
+                  if (!chatInput.trim() || isFollowUpInFlight) return;
                   sendFollowUp(chatInput);
                   setChatInput("");
                 }}
