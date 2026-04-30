@@ -196,13 +196,19 @@ export function PdfNotesView({ modelChoice, setModelChoice }: PdfNotesViewProps)
                 disabled={!content}
                 onClick={() => {
                   if (!content) return;
+                  let backstopTimer: ReturnType<typeof setTimeout> | undefined;
                   const cleanup = () => {
+                    if (backstopTimer) clearTimeout(backstopTimer);
                     document.body.removeAttribute("data-printing");
                     window.removeEventListener("afterprint", cleanup);
                   };
                   window.addEventListener("afterprint", cleanup);
                   document.body.setAttribute("data-printing", "document");
-                  setTimeout(() => window.print(), 50);
+                  requestAnimationFrame(() => {
+                    window.print();
+                    // Backstop in case afterprint never fires (some mobile browsers).
+                    backstopTimer = setTimeout(cleanup, 4000);
+                  });
                 }}
               >
                 <Printer size={14} /> Print / PDF
