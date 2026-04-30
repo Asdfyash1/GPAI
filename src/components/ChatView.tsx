@@ -97,7 +97,7 @@ export function ChatView({
       {
         messages: next.map((m) => ({
           role: m.role,
-          content: m.content,
+          content: m.role === "assistant" ? extractSources(m.content).content : m.content,
           attachments: m.attachments,
         })),
         modelChoice,
@@ -275,8 +275,8 @@ function AssistantBlock({
       <div className="assistant-content">
         <MathMarkdown content={visibleContent} />
         {streaming && <span className="streaming-cursor" aria-hidden />}
+        {!streaming && <SourcesPills sources={sources} />}
       </div>
-      {!streaming && <SourcesPills sources={sources} />}
     </div>
   );
 }
