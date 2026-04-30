@@ -123,7 +123,10 @@ export async function POST(request: Request): Promise<Response> {
   const quiz: PracticeItem[] = (parsed.quiz ?? [])
     .map((q) => {
       const question = typeof q.question === "string" ? q.question : "";
-      const answer = typeof q.answer === "string" ? q.answer : "";
+      // Trim the answer symmetrically with choices so an LLM's stray
+      // whitespace ("  9.8 m/s²  " vs choice "9.8 m/s²") doesn't make
+      // a valid MCQ silently degrade to short-answer.
+      const answer = typeof q.answer === "string" ? q.answer.trim() : "";
       const rawChoices = Array.isArray(q.choices) ? q.choices : null;
       const choices = rawChoices
         ?.map((c) => (typeof c === "string" ? c.trim() : ""))
