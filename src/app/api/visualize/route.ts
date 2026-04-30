@@ -54,9 +54,36 @@ function categoryStylePrefix(category: VisualizerCategory): string {
 function specSystem(category: VisualizerCategory) {
   const wantMermaid = category !== "illustration" && category !== "chemistry";
   const mermaidBlock = wantMermaid
-    ? "\n\n## Mermaid\n\u0060\u0060\u0060mermaid\n<a complete Mermaid diagram — flowchart TD or graph LR for flowchart/diagram/logic, classDiagram or stateDiagram-v2 if more appropriate. Keep node labels short. Avoid quotes inside labels.>\n\u0060\u0060\u0060"
+    ? `\n\n## Mermaid\n\`\`\`mermaid\n<a COMPLETE, RENDERABLE Mermaid diagram. Pick the right diagram type for the topic:\n- flowchart TD / flowchart LR for processes, pipelines, decision trees, ${category}\n- graph LR for relationships / set diagrams\n- sequenceDiagram for protocol / interaction\n- classDiagram for data model\n- stateDiagram-v2 for state machines\n\nSTRICT RULES so the diagram actually renders:\n- ALWAYS quote node labels that contain parentheses, colons, slashes, or punctuation: A["Step (1): apply Newton's 2nd law"]\n- Use only ASCII letters / digits / underscore in node IDs (A, B, step1, not "A.1" or "A-B")\n- Keep labels under 60 characters; abbreviate long phrases\n- Do NOT include backticks or markdown inside the diagram\n- Do NOT mix multiple top-level diagram declarations in one block\n- 5-12 nodes is a good size for a study aid\n>\n\`\`\``
     : "";
   return `You are an AI visualization engine for STEM education. The user wants a ${category} visualization.\n\nReturn:\n## Description\n2-3 sentences plain-English summary of what the diagram should show.\n\n## Variants\n3 short bullet points of alternative approaches.\n\n## Quality checks\n3 short bullet points (accuracy, completeness, clarity).${mermaidBlock}\n\nKeep prose under 220 words. Use markdown.`;
+}
+
+/**
+ * Make best-effort fixes so a Mermaid block produced by an LLM actually
+ * renders. The most common failure modes are unquoted labels containing
+ * parentheses or colons, and stray Markdown emphasis around node IDs.
+ */
+function sanitizeMermaid(code: string): string {
+  let out = code.trim();
+  // Strip leading "diagram:" / "Mermaid:" headers some models add.
+  out = out.replace(/^(?:Mermaid|Diagram)\s*:\s*/i, "");
+  // Replace [Some (foo) bar] -> ["Some (foo) bar"] when the label contains
+  // characters that Mermaid cannot parse without quoting.
+  out = out.replace(/\[([^\]\n"][^\]\n]*[(:][^\]\n]*)\]/g, (_, inner) => {
+    const cleaned = inner.replace(/"/g, "'").trim();
+    return `["${cleaned}"]`;
+  });
+  // Same for ((Text)) and {Text} shapes when they contain ()/:.
+  out = out.replace(/\(\(([^)\n"][^)\n]*[(:][^)\n]*)\)\)/g, (_, inner) => {
+    const cleaned = inner.replace(/"/g, "'").trim();
+    return `(("${cleaned}"))`;
+  });
+  out = out.replace(/\{([^}\n"][^}\n]*[(:][^}\n]*)\}/g, (_, inner) => {
+    const cleaned = inner.replace(/"/g, "'").trim();
+    return `{"${cleaned}"}`;
+  });
+  return out;
 }
 
 function extractMermaid(md: string): string | undefined {
@@ -112,7 +139,8 @@ export async function POST(request: Request) {
       description = matchSection(md, "Description") || md.split("\n").slice(0, 4).join(" ");
       variants = matchBullets(matchSection(md, "Variants"));
       qualityChecks = matchBullets(matchSection(md, "Quality checks"));
-      diagramSpec = extractMermaid(md);
+      const rawMermaid = extractMermaid(md);
+      diagramSpec = rawMermaid ? sanitizeMermaid(rawMermaid) : undefined;
       verification.push({
         model: `Cloud:${modelName}`,
         role: "visualizer",

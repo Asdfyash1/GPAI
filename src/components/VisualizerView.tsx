@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, Loader2, RefreshCcw } from "lucide-react";
+import { Code2, Copy, Download, Loader2, RefreshCcw } from "lucide-react";
 import type {
   FrameRatio,
   ModelChoice,
@@ -152,11 +152,11 @@ export function VisualizerView({
           />
         )}
         {result && !result.imageDataUrl && result.diagramSpec && (
-          <div
-            className={`visualizer-diagram visualizer-image-${ratio.replace(":", "x")}`}
-          >
-            <MermaidBlock code={result.diagramSpec} />
-          </div>
+          <DiagramView
+            code={result.diagramSpec}
+            ratio={ratio}
+            filename={`diagram-${result.id}`}
+          />
         )}
         {result && !result.imageDataUrl && !result.diagramSpec && (
           <div className="visualizer-fallback">
@@ -215,6 +215,88 @@ export function VisualizerView({
           </button>
         </div>
       </aside>
+    </div>
+  );
+}
+
+function DiagramView({
+  code,
+  ratio,
+  filename,
+}: {
+  code: string;
+  ratio: FrameRatio;
+  filename: string;
+}) {
+  const [showSource, setShowSource] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleDownloadSvg = () => {
+    if (typeof document === "undefined") return;
+    const svg = document.querySelector(".visualizer-diagram .mermaid-block svg");
+    if (!svg) return;
+    const serializer = new XMLSerializer();
+    const source = serializer.serializeToString(svg);
+    const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${filename}.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div
+      className={`visualizer-diagram visualizer-image-${ratio.replace(":", "x")}`}
+    >
+      <div className="diagram-toolbar">
+        <button
+          type="button"
+          className="icon-button"
+          onClick={() => setShowSource((v) => !v)}
+          aria-label={showSource ? "Hide source" : "View source"}
+          title={showSource ? "Hide source" : "View source"}
+        >
+          <Code2 size={14} />
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          onClick={handleCopy}
+          aria-label={copied ? "Copied" : "Copy source"}
+          title={copied ? "Copied" : "Copy Mermaid source"}
+        >
+          <Copy size={14} />
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          onClick={handleDownloadSvg}
+          aria-label="Download SVG"
+          title="Download as SVG"
+        >
+          <Download size={14} />
+        </button>
+      </div>
+      {showSource ? (
+        <pre className="diagram-source">
+          <code>{code}</code>
+        </pre>
+      ) : (
+        <MermaidBlock code={code} />
+      )}
     </div>
   );
 }

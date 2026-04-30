@@ -1711,12 +1711,39 @@ a {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 24px;
+  padding-top: 44px;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
   max-width: 920px;
   overflow: auto;
+}
+
+.diagram-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 1;
+}
+
+.diagram-source {
+  width: 100%;
+  margin: 0;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--panel);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 60vh;
 }
 
 .visualizer-diagram .mermaid-block {
