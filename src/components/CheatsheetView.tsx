@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { History, Trash2 } from "lucide-react";
 import {
   Bold,
@@ -47,7 +47,6 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
   const [history, setHistory] = useState<CheatsheetVersion[]>([]);
   const stream = useStream();
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
-  const printRef = useRef<HTMLDivElement | null>(null);
 
   const pushVersion = (label: string, body: string) => {
     const id = `cs_${Date.now()}`;
@@ -125,24 +124,26 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
   };
 
   const handlePrint = () => {
-    if (!printRef.current) return;
-    const html = printRef.current.innerHTML;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`<!doctype html><html><head><title>Cheatsheet</title>
-      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
-      <style>
-      @page { size: A4; margin: 12mm; }
-      body { font-family: -apple-system, system-ui, sans-serif; columns: 2; column-gap: 14mm; font-size: 9pt; line-height: 1.35; color:#111; }
-      h1,h2,h3 { break-after: avoid; }
-      h1 { font-size: 14pt; }
-      h2 { font-size: 11pt; margin-top: 6pt; }
-      ul, ol { padding-left: 16px; }
-      .katex { font-size: 1em !important; }
-      </style></head><body>${html}</body></html>`);
-    win.document.close();
-    win.focus();
-    win.print();
+    // We rely on the global `@media print` rules in globals.css to hide the
+    // app shell and only render `.cheatsheet-page` at A4 size. Set a body
+    // marker so the print stylesheet only fires for cheatsheet print, then
+    // restore.
+    if (typeof document !== "undefined") {
+      document.body.dataset.printing = "cheatsheet";
+    }
+    requestAnimationFrame(() => {
+      window.print();
+      // Clear the marker after the print dialog returns. afterprint is
+      // dispatched in all major browsers; fall back to a timeout in case
+      // the user dismisses with no afterprint event.
+      const cleanup = () => {
+        if (typeof document !== "undefined")
+          delete document.body.dataset.printing;
+        window.removeEventListener("afterprint", cleanup);
+      };
+      window.addEventListener("afterprint", cleanup);
+      setTimeout(cleanup, 4000);
+    });
   };
 
   const empty = !content && !stream.isStreaming;
@@ -326,7 +327,6 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
         </div>
         <div className="cheatsheet-canvas-wrap" style={{ ["--zoom" as string]: zoom / 100 }}>
           <article
-            ref={printRef}
             className="cheatsheet-page"
             style={{ transform: `scale(${zoom / 100})` }}
           >
