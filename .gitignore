@@ -4,6 +4,11 @@
 /node_modules
 /.pnp
 .pnp.*
+
+# Tesseract.js downloads its language data lazily into the project root
+# the first time `recognize()` is called; do not commit it.
+eng.traineddata
+*.traineddata
 .yarn/*
 !.yarn/patches
 !.yarn/plugins

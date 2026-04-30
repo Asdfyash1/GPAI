@@ -5,11 +5,16 @@ import type {
   CrossCheckStatus,
   EducationRequest,
   ModelChoice,
+  UploadedAsset,
   VerificationSignal,
 } from "@/types/education";
 import { buildDemoResponse } from "@/lib/demo-solver";
 import { parseModelResponse } from "@/lib/response-parser";
 import { buildTaskPrompt, buildVerifierPrompt, getSystemPrompt } from "@/lib/prompts";
+import {
+  ATTACHMENT_FAILURE_PREFIX,
+  findUnreadableAttachments,
+} from "@/lib/vision";
 
 const nvidiaBaseUrl = "https://integrate.api.nvidia.com/v1";
 const REQUEST_TIMEOUT_MS = 90_000;
@@ -106,6 +111,22 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
   const providers = configuredProviders();
   const verification: VerificationSignal[] = [];
   const requestedModel = selectedModel(request.modelChoice ?? "auto");
+
+  // HARD STOP: see streamEducationalSolverDraft for rationale.
+  const unreadable = findUnreadableAttachments(request.attachments);
+  if (unreadable.length > 0 && unreadable.length === request.attachments.length) {
+    verification.push({
+      model: "vision:all-providers",
+      role: "solver",
+      status: "fallback",
+      notes: "All OCR providers failed to read the uploaded attachment(s); skipped LLM call to prevent hallucination.",
+    });
+    return parseModelResponse(
+      buildUnreadableAttachmentsMarkdown(unreadable),
+      request,
+      verification,
+    );
+  }
 
   if (request.modelChoice === "demo" || providers.length === 0) {
     verification.push({
@@ -223,6 +244,14 @@ export type StreamingHandle = {
 export async function streamEducationalSolverDraft(
   request: EducationRequest,
 ): Promise<StreamingHandle> {
+  // HARD STOP: if every attachment failed to OCR, never call the LLM —
+  // it WILL hallucinate a problem. Stream a deterministic "couldn't read
+  // your file" markdown response so the user sees a clear, honest error.
+  const unreadable = findUnreadableAttachments(request.attachments);
+  if (unreadable.length > 0 && unreadable.length === request.attachments.length) {
+    return unreadableAttachmentsStream(unreadable);
+  }
+
   const providers = configuredProviders();
   if (request.modelChoice === "demo" || providers.length === 0) {
     return demoStream(request);
@@ -476,4 +505,74 @@ async function* chunked(text: string): AsyncGenerator<string> {
     await new Promise((r) => setTimeout(r, 25));
     yield chunk;
   }
+}
+
+/**
+ * Build the deterministic markdown response that replaces an LLM call when
+ * every uploaded attachment failed OCR. The format matches the standard
+ * sectioned answer (## Problem, ## Answer, ...) so the response-parser and
+ * UI render it without special-casing — but every section honestly tells
+ * the user the file was unreadable instead of inventing a problem.
+ */
+function buildUnreadableAttachmentsMarkdown(
+  unreadable: UploadedAsset[],
+): string {
+  const list = unreadable
+    .map((file) => {
+      const reason = (file.extractedText ?? "")
+        .replace(ATTACHMENT_FAILURE_PREFIX, "")
+        .trim();
+      return `- **${file.name}** — ${reason || "could not be read"}`;
+    })
+    .join("\n");
+
+  return [
+    "## Problem",
+    "I couldn't read the file(s) you uploaded, so I won't guess at a problem.",
+    "",
+    list,
+    "",
+    "## Answer",
+    "**Please re-upload a clearer copy.** Specifically:",
+    "- Photo of a textbook page → take it straight on, in good light, with the equation filling most of the frame.",
+    "- Screenshot → make sure the text is sharp and large (no tiny thumbnails).",
+    "- PDF → if it is a scanned PDF, save individual pages as PNG / JPG and upload those instead — text-only PDFs work, but image-only PDFs need OCR which sometimes fails on poor scans.",
+    "- Or paste the problem text directly into the box and I'll solve it immediately.",
+    "",
+    "## Cross-check",
+    "Skipped: with no readable input there is nothing to verify.",
+    "",
+    "## Solution",
+    "_Will be produced once a readable copy of the problem is available._",
+    "",
+    "## Verification",
+    "_n/a_",
+    "",
+    "## Common mistakes",
+    "- Photographing at an angle so the equation distorts.",
+    "- Using a screenshot of a screenshot — each pass loses fidelity.",
+    "- Uploading a PDF that contains only scanned page images without an OCR layer.",
+    "",
+    "## Key concepts",
+    "- A clear, well-lit, head-on capture is enough for the vision model to transcribe handwritten math.",
+    "",
+    "## Follow-up questions",
+    "- Would you like to type the equation manually instead?",
+    "",
+    "## Quiz",
+    "_n/a — waiting for a readable problem._",
+    "",
+    "## Similar practice",
+    "_n/a — waiting for a readable problem._",
+  ].join("\n");
+}
+
+async function unreadableAttachmentsStream(
+  unreadable: UploadedAsset[],
+): Promise<StreamingHandle> {
+  const text = buildUnreadableAttachmentsMarkdown(unreadable);
+  return {
+    textStream: chunked(text),
+    text: Promise.resolve(text),
+  };
 }

@@ -416,7 +416,7 @@ Not yet replicated in our clone (every view re-uploads).
 | PDF Notes | `src/components/PdfNotesView.tsx` (mode `"pdf-notes"`) | `src/app/api/educate/stream/route.ts` + `src/app/api/parse-pdf/route.ts` (PDF text extraction) |
 | Cheatsheet Builder | `src/components/CheatsheetView.tsx` (mode `"cheatsheet"`) | `src/app/api/educate/stream/route.ts` |
 | Notebook | `src/components/NotebookView.tsx` (mode `"notebook"`) | `src/app/api/educate/stream/route.ts` |
-| Vision / OCR | `src/lib/vision.ts` (`analyzeUploadedImages`) | invoked by `/api/educate/stream` and `/api/educate` |
+| Vision / OCR | `src/lib/vision.ts` (`analyzeUploadedImages`) — multi-provider chain (NVIDIA NIM Llama-3.2-Vision → Gemini 2.0 Flash → Tesseract.js) with `[ATTACHMENT_UNREADABLE]` failure marker | invoked by `/api/educate/stream` and `/api/educate`; orchestrator hard-stops on the failure marker so unreadable attachments never reach the LLM |
 | System + task prompts | `src/lib/prompts.ts` (`getSystemPrompt`, `buildTaskPrompt`) | shared across modes |
 | Orchestrator | `src/lib/orchestrator.ts` (`streamEducationalSolverDraft`, `runEducationalOrchestrator`) | shared |
 
@@ -429,4 +429,26 @@ When extending a feature, prefer to:
    incrementally.
 3. Reuse `analyzeUploadedImages` and `parsePdf` for source ingestion — do
    NOT re-implement vision or PDF parsing.
+
+### Vision / OCR pipeline (post 2026-04-30 fix)
+
+`analyzeUploadedImages` in `src/lib/vision.ts` runs a fallback chain in this order:
+
+1. **NVIDIA NIM** (`NVIDIA_API_KEY` / `NIM_API_KEY` / `NVIDIA_VISION_API_KEY`) — primary `meta/llama-3.2-11b-vision-instruct`, fallback `meta/llama-3.2-90b-vision-instruct`. 90B is more accurate but routinely times out at 40s on the free NIM tier so 11B is primary.
+2. **Google Gemini** (`GEMINI_API_KEY` / `GOOGLE_API_KEY`) — `gemini-2.0-flash`, free tier; **strongly recommended for handwritten math** because NIM 11B is unreliable on subtle exponents.
+3. **Tesseract.js** — pure WASM offline OCR, no API key. Best for printed text; weak on handwriting. Last-resort fallback so the system still produces some transcription with zero cloud keys configured.
+
+Each provider can return `UNREADABLE: <reason>` (the model self-reporting it can't read the image) — the helper recognises that sentinel and advances the chain. If all providers fail, `extractedText` is set to `[ATTACHMENT_UNREADABLE] all OCR providers failed → <error summary>`.
+
+The orchestrator (`runEducationalOrchestrator` and `streamEducationalSolverDraft` in `src/lib/orchestrator.ts`) checks for the `ATTACHMENT_FAILURE_PREFIX` on every attachment. If **all** attachments failed, it returns a deterministic markdown response asking the user to re-upload — the LLM is **never** called with empty OCR. This is what prevents the "uploaded an ODE, got a chemistry answer" hallucination class of bug.
+
+**Backend testing** lives in `scripts/`:
+
+```sh
+# Test the OCR chain in isolation:
+npx tsx scripts/test-vision.ts /path/to/image.jpg
+
+# Round-trip the full /api/educate/stream against npm run dev:
+npx tsx scripts/test-api.ts /path/to/image.jpg
+```
 
