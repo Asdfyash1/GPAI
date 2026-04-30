@@ -976,6 +976,54 @@ a {
   line-height: 1.4;
 }
 
+.followup-thread {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.followup-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev, var(--panel));
+}
+
+.followup-q {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.followup-q-icon {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
+}
+
+.followup-a {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.followup-a > * {
+  font-size: inherit;
+}
+
+.followup-pending {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
 .rail-input-wrap {
   display: flex;
   align-items: center;

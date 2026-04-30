@@ -14,7 +14,9 @@ import {
   EyeOff,
   Image as ImageIcon,
   Link as LinkIcon,
+  MessageCircle,
   Sparkles,
+  User,
 } from "lucide-react";
 import type {
   EducationResponse,
@@ -96,12 +98,6 @@ export function SolverView(props: SolverViewProps) {
     );
   };
 
-  const handleQuickAction = (chipLabel: string) => {
-    if (!props.result) return;
-    const re = `${chipLabel}: ${props.result.prompt}`;
-    handleSubmit(re);
-  };
-
   const showResults = stream.isStreaming || props.result || streamText;
 
   return (
@@ -136,7 +132,6 @@ export function SolverView(props: SolverViewProps) {
           result={props.result}
           setResult={props.setResult}
           modelChoice={props.modelChoice}
-          onChip={handleQuickAction}
           onVisualize={props.onVisualize}
           onAddHistory={props.onAddHistory}
         />
@@ -196,7 +191,6 @@ function SolverResult({
   result,
   setResult,
   modelChoice,
-  onChip,
   onVisualize,
   onAddHistory,
 }: {
@@ -206,7 +200,6 @@ function SolverResult({
   result: EducationResponse | null;
   setResult: (r: EducationResponse | null) => void;
   modelChoice: ModelChoice;
-  onChip: (chip: string) => void;
   onVisualize: (prompt: string) => void;
   onAddHistory: (r: EducationResponse) => void;
 }) {
@@ -214,6 +207,86 @@ function SolverResult({
   const [chatInput, setChatInput] = useState("");
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
+  // In-context follow-up thread anchored to this solve. Each entry is a
+  // Q/A pair; the answer streams in chunk-by-chunk into `a`.
+  const [thread, setThread] = useState<
+    Array<{ q: string; a: string; isStreaming: boolean; error?: string }>
+  >([]);
+
+  const sendFollowUp = async (question: string) => {
+    const q = question.trim();
+    if (!q || !result) return;
+    const idx = thread.length;
+    setThread((prev) => [...prev, { q, a: "", isStreaming: true }]);
+
+    const prior = thread
+      .map((t) => `User: ${t.q}\nAssistant: ${t.a}`)
+      .join("\n\n");
+    const primer = [
+      "You are a STEM tutor helping a student understand a problem they already saw a full solution to.",
+      "Original problem:",
+      result.prompt,
+      "",
+      "Reference solution (may include LaTeX):",
+      result.solution.slice(0, 4000),
+      prior ? "\n\nPrior follow-ups in this thread:\n" + prior : "",
+      "",
+      "Answer the student's next follow-up. Be concise (3-8 sentences unless they explicitly ask for depth). Stay grounded in the reference solution; if asked something unrelated, gently redirect.",
+    ].join("\n");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: primer },
+            { role: "user", content: q },
+          ],
+          modelChoice,
+          deepExplain: false,
+          webEnabled: false,
+        }),
+      });
+      if (!res.ok || !res.body) {
+        const err = await res.text().catch(() => "");
+        setThread((prev) =>
+          prev.map((t, i) =>
+            i === idx
+              ? { ...t, isStreaming: false, error: err || `HTTP ${res.status}` }
+              : t,
+          ),
+        );
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        setThread((prev) =>
+          prev.map((t, i) => (i === idx ? { ...t, a: acc } : t)),
+        );
+      }
+      setThread((prev) =>
+        prev.map((t, i) => (i === idx ? { ...t, isStreaming: false } : t)),
+      );
+    } catch (err) {
+      setThread((prev) =>
+        prev.map((t, i) =>
+          i === idx
+            ? {
+                ...t,
+                isStreaming: false,
+                error: err instanceof Error ? err.message : "Follow-up failed.",
+              }
+            : t,
+        ),
+      );
+    }
+  };
 
   const handleGenerateQuiz = async () => {
     if (!result) return;
@@ -367,8 +440,8 @@ function SolverResult({
         {tab === "followups" && (
           <div className="rail-body">
             <div className="ask-empty">
-              <Sparkles size={24} />
-              <p>Ask about this problem</p>
+              <MessageCircle size={24} />
+              <p>Ask follow-ups about this problem</p>
             </div>
             <div className="chip-grid">
               {QUICK_CHIPS.map((chip) => (
@@ -376,7 +449,7 @@ function SolverResult({
                   key={chip}
                   type="button"
                   className="chip"
-                  onClick={() => onChip(chip)}
+                  onClick={() => sendFollowUp(chip)}
                   disabled={!result}
                 >
                   {chip}
@@ -399,12 +472,34 @@ function SolverResult({
                     key={f}
                     type="button"
                     className="chip"
-                    onClick={() => onChip(f)}
+                    onClick={() => sendFollowUp(f)}
                   >
                     {f}
                   </button>
                 ))}
               </div>
+            )}
+            {thread.length > 0 && (
+              <ol className="followup-thread">
+                {thread.map((t, i) => (
+                  <li key={i} className="followup-turn">
+                    <div className="followup-q">
+                      <User size={12} className="followup-q-icon" />
+                      <span>{t.q}</span>
+                    </div>
+                    <div className="followup-a">
+                      {t.a ? (
+                        <MathMarkdown content={t.a} />
+                      ) : t.isStreaming ? (
+                        <span className="followup-pending">Thinking…</span>
+                      ) : null}
+                      {t.error && (
+                        <p className="error-text">{t.error}</p>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
             )}
             <div className="rail-input-wrap">
               <input
@@ -415,7 +510,7 @@ function SolverResult({
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && chatInput.trim()) {
-                    onChip(chatInput);
+                    sendFollowUp(chatInput);
                     setChatInput("");
                   }
                 }}
@@ -425,7 +520,7 @@ function SolverResult({
                 className="icon-button"
                 onClick={() => {
                   if (!chatInput.trim()) return;
-                  onChip(chatInput);
+                  sendFollowUp(chatInput);
                   setChatInput("");
                 }}
                 aria-label="Send"
