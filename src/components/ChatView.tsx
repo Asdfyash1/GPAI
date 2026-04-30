@@ -152,6 +152,7 @@ export function ChatView({
             empty ? "Add PDF, image, website or YouTube link as context." : undefined
           }
           compact={!empty}
+          enterToSend
         />
         {empty && (
           <div className="chat-suggestions">

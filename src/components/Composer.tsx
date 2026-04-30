@@ -51,6 +51,12 @@ type ComposerProps = {
   ratioControl?: React.ReactNode;
   hint?: string;
   compact?: boolean;
+  /**
+   * If true, plain Enter sends and Shift+Enter inserts a newline
+   * (chat-style). If false (the default), Enter inserts a newline and
+   * Cmd/Ctrl+Enter sends (long-form prompt style).
+   */
+  enterToSend?: boolean;
 };
 
 export function Composer(props: ComposerProps) {
@@ -86,6 +92,12 @@ export function Composer(props: ComposerProps) {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter") return;
+    if (props.enterToSend && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      props.onSubmit();
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       props.onSubmit();

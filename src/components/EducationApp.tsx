@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import type {
   ChatMessage,
@@ -40,6 +40,15 @@ export function EducationApp() {
   const [responseStore, setResponseStore] = useState<Record<string, EducationResponse>>({});
   const [chatSessions, setChatSessions] = useState<Record<string, ChatSession>>({});
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  // Mirrors `activeChatId` so that handlers invoked rapidly back-to-back
+  // (e.g. user message + streamed assistant message) see the freshly minted
+  // id even before React commits the setState. Without this, every
+  // streamed reply would mint a new chat session and create a duplicate
+  // sidebar entry.
+  const activeChatIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
   const [visualizerSeed, setVisualizerSeed] = useState<string>("");
 
   // Initial theme + history load (defer to next tick so React rule allows it)
@@ -135,9 +144,10 @@ export function EducationApp() {
       // reset \u2014 don\u2019t persist an empty session
       return;
     }
-    let id = activeChatId;
+    let id = activeChatIdRef.current ?? activeChatId;
     if (!id) {
-      id = `chat_${Date.now()}`;
+      id = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      activeChatIdRef.current = id;
       setActiveChatId(id);
     }
     const firstUser = next.find((m) => m.role === "user");
@@ -167,6 +177,7 @@ export function EducationApp() {
     setActiveItem(undefined);
     setAttachments([]);
     setVisualizerSeed("");
+    activeChatIdRef.current = null;
     setActiveChatId(null);
   };
 
@@ -174,10 +185,12 @@ export function EducationApp() {
     setMode(item.mode);
     setActiveItem(item.id);
     if (item.mode === "chat") {
+      activeChatIdRef.current = item.id;
       setActiveChatId(item.id);
       setSolverResult(null);
       return;
     }
+    activeChatIdRef.current = null;
     setActiveChatId(null);
     const stored = responseStore[item.id];
     if (stored && stored.mode === "solver") {
@@ -196,7 +209,10 @@ export function EducationApp() {
         delete next[item.id];
         return next;
       });
-      if (activeChatId === item.id) setActiveChatId(null);
+      if (activeChatId === item.id) {
+        activeChatIdRef.current = null;
+        setActiveChatId(null);
+      }
     } else {
       setResponseStore((prev) => {
         const next = { ...prev };
