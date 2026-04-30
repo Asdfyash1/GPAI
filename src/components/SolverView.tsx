@@ -138,6 +138,7 @@ export function SolverView(props: SolverViewProps) {
           modelChoice={props.modelChoice}
           onChip={handleQuickAction}
           onVisualize={props.onVisualize}
+          onAddHistory={props.onAddHistory}
         />
       )}
     </div>
@@ -197,6 +198,7 @@ function SolverResult({
   modelChoice,
   onChip,
   onVisualize,
+  onAddHistory,
 }: {
   streamText: string;
   isStreaming: boolean;
@@ -206,6 +208,7 @@ function SolverResult({
   modelChoice: ModelChoice;
   onChip: (chip: string) => void;
   onVisualize: (prompt: string) => void;
+  onAddHistory: (r: EducationResponse) => void;
 }) {
   const [tab, setTab] = useState<"followups" | "quiz">("followups");
   const [chatInput, setChatInput] = useState("");
@@ -237,7 +240,11 @@ function SolverResult({
         return;
       }
       const merged = [...(result.quiz ?? []), ...data.quiz];
-      setResult({ ...result, quiz: merged });
+      const updated = { ...result, quiz: merged };
+      setResult(updated);
+      // Also write through to responseStore so the new quiz items survive
+      // navigation away from the active solve and a page reload.
+      onAddHistory(updated);
     } catch (err) {
       setQuizError(err instanceof Error ? err.message : "Quiz request failed.");
     } finally {

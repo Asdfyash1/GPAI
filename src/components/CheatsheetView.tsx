@@ -131,17 +131,18 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
     if (typeof document !== "undefined") {
       document.body.dataset.printing = "cheatsheet";
     }
+    // Register the afterprint listener BEFORE calling window.print(), since
+    // print() is synchronous in major browsers and afterprint is dispatched
+    // before print() returns.
+    const cleanup = () => {
+      if (typeof document !== "undefined")
+        delete document.body.dataset.printing;
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
     requestAnimationFrame(() => {
       window.print();
-      // Clear the marker after the print dialog returns. afterprint is
-      // dispatched in all major browsers; fall back to a timeout in case
-      // the user dismisses with no afterprint event.
-      const cleanup = () => {
-        if (typeof document !== "undefined")
-          delete document.body.dataset.printing;
-        window.removeEventListener("afterprint", cleanup);
-      };
-      window.addEventListener("afterprint", cleanup);
+      // Backstop in case afterprint never fires (e.g. some mobile browsers).
       setTimeout(cleanup, 4000);
     });
   };
