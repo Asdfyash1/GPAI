@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, PanelLeftClose, PanelLeft, ChevronRight } from "lucide-react";
+import { Plus, PanelLeftClose, PanelLeft, ChevronRight, Trash2 } from "lucide-react";
 import type { FeatureMode } from "@/types/education";
 
 export type SidebarItem = {
@@ -16,6 +16,7 @@ type SidebarProps = {
   items: SidebarItem[];
   activeItemId?: string;
   onSelect: (item: SidebarItem) => void;
+  onDelete?: (item: SidebarItem) => void;
   onNewTask: () => void;
   userLabel?: string;
 };
@@ -26,6 +27,7 @@ export function Sidebar({
   items,
   activeItemId,
   onSelect,
+  onDelete,
   onNewTask,
   userLabel = "Guest",
 }: SidebarProps) {
@@ -75,16 +77,34 @@ export function Sidebar({
           ) : (
             <ul className="recent-list">
               {items.map((item) => (
-                <li key={item.id}>
+                <li key={item.id} className="recent-row">
                   <button
                     type="button"
                     className={`recent-item ${
                       activeItemId === item.id ? "is-active" : ""
                     }`}
                     onClick={() => onSelect(item)}
+                    title={`${item.mode} \u2014 ${item.title}`}
                   >
+                    <span className={`recent-mode mode-${item.mode}`}>
+                      {modeBadge(item.mode)}
+                    </span>
                     <span className="recent-title">{item.title}</span>
                   </button>
+                  {onDelete && (
+                    <button
+                      type="button"
+                      className="icon-button recent-delete"
+                      aria-label={`Delete ${item.title}`}
+                      title="Delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(item);
+                      }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -102,4 +122,25 @@ export function Sidebar({
       </div>
     </aside>
   );
+}
+
+function modeBadge(mode: FeatureMode): string {
+  switch (mode) {
+    case "solver":
+      return "S";
+    case "chat":
+      return "C";
+    case "cheatsheet":
+      return "CS";
+    case "visualizer":
+      return "V";
+    case "report":
+      return "R";
+    case "pdf-notes":
+      return "P";
+    case "notebook":
+      return "N";
+    default:
+      return "\u2022";
+  }
 }

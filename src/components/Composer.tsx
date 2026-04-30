@@ -162,9 +162,15 @@ export function Composer(props: ComposerProps) {
               type="button"
               className={`pill-button ${props.webEnabled ? "is-active" : ""}`}
               onClick={() => props.onWebToggle?.(!props.webEnabled)}
-              title="Toggle web context"
+              title={
+                props.webEnabled
+                  ? "Web search is on — sources will be fetched and grounded into the answer"
+                  : "Turn on web search to ground answers in live web sources"
+              }
+              aria-pressed={props.webEnabled}
             >
               <Globe size={14} />
+              <span>Web search</span>
             </button>
           )}
           {props.showDeepExplain && (

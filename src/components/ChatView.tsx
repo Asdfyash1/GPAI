@@ -13,6 +13,8 @@ import { useStream } from "@/hooks/useStream";
 type ChatViewProps = {
   modelChoice: ModelChoice;
   setModelChoice: (m: ModelChoice) => void;
+  messages: ChatMessage[];
+  onMessagesChange: (next: ChatMessage[]) => void;
 };
 
 const SAMPLE_PROMPTS = [
@@ -22,11 +24,16 @@ const SAMPLE_PROMPTS = [
   "What is entropy in physics vs information theory?",
 ];
 
-export function ChatView({ modelChoice, setModelChoice }: ChatViewProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export function ChatView({
+  modelChoice,
+  setModelChoice,
+  messages,
+  onMessagesChange,
+}: ChatViewProps) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
-  const [deepExplain, setDeepExplain] = useState(true);
+  const [deepExplain, setDeepExplain] = useState(false);
+  const [webEnabled, setWebEnabled] = useState(false);
   const [streamText, setStreamText] = useState("");
   const stream = useStream();
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -48,7 +55,7 @@ export function ChatView({ modelChoice, setModelChoice }: ChatViewProps) {
     };
 
     const next = [...messages, userMessage];
-    setMessages(next);
+    onMessagesChange(next);
     setInput("");
     setAttachments([]);
     setStreamText("");
@@ -63,12 +70,13 @@ export function ChatView({ modelChoice, setModelChoice }: ChatViewProps) {
         })),
         modelChoice,
         deepExplain,
+        webEnabled,
       },
       {
         onChunk: (textSoFar) => setStreamText(textSoFar),
         onFinal: (finalText) => {
-          setMessages((prev) => [
-            ...prev,
+          onMessagesChange([
+            ...next,
             {
               id: `a_${Date.now()}`,
               role: "assistant",
@@ -79,8 +87,8 @@ export function ChatView({ modelChoice, setModelChoice }: ChatViewProps) {
           setStreamText("");
         },
         onError: (msg) => {
-          setMessages((prev) => [
-            ...prev,
+          onMessagesChange([
+            ...next,
             {
               id: `e_${Date.now()}`,
               role: "assistant",
@@ -137,6 +145,8 @@ export function ChatView({ modelChoice, setModelChoice }: ChatViewProps) {
           deepExplain={deepExplain}
           onDeepExplainChange={setDeepExplain}
           showWeb
+          webEnabled={webEnabled}
+          onWebToggle={setWebEnabled}
           placeholder={empty ? "Type a message..." : "Ask follow-up question"}
           hint={
             empty ? "Add PDF, image, website or YouTube link as context." : undefined

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import type {
+  ChatMessage,
+  ChatSession,
   EducationResponse,
   FeatureMode,
   ModelChoice,
@@ -23,6 +25,7 @@ type Theme = "dark" | "light";
 const HISTORY_KEY = "eduforge:history";
 const THEME_KEY = "eduforge:theme";
 const STORE_KEY = "eduforge:responses";
+const CHAT_STORE_KEY = "eduforge:chats";
 
 export function EducationApp() {
   const [mode, setMode] = useState<FeatureMode>("solver");
@@ -35,6 +38,8 @@ export function EducationApp() {
   const [history, setHistory] = useState<SidebarItem[]>([]);
   const [activeItem, setActiveItem] = useState<string | undefined>();
   const [responseStore, setResponseStore] = useState<Record<string, EducationResponse>>({});
+  const [chatSessions, setChatSessions] = useState<Record<string, ChatSession>>({});
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [visualizerSeed, setVisualizerSeed] = useState<string>("");
 
   // Initial theme + history load (defer to next tick so React rule allows it)
@@ -55,6 +60,14 @@ export function EducationApp() {
       if (savedStore) {
         try {
           setResponseStore(JSON.parse(savedStore) as Record<string, EducationResponse>);
+        } catch {
+          /* ignore */
+        }
+      }
+      const savedChats = localStorage.getItem(CHAT_STORE_KEY);
+      if (savedChats) {
+        try {
+          setChatSessions(JSON.parse(savedChats) as Record<string, ChatSession>);
         } catch {
           /* ignore */
         }
@@ -83,9 +96,23 @@ export function EducationApp() {
       }
       localStorage.setItem(STORE_KEY, JSON.stringify(trimmed));
     } catch {
-      /* quota exceeded etc — best-effort persist */
+      /* quota exceeded etc \u2014 best-effort persist */
     }
   }, [responseStore, history]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const ids = new Set(history.filter((h) => h.mode === "chat").map((h) => h.id));
+      const trimmed: Record<string, ChatSession> = {};
+      for (const id of ids) {
+        if (chatSessions[id]) trimmed[id] = chatSessions[id];
+      }
+      localStorage.setItem(CHAT_STORE_KEY, JSON.stringify(trimmed));
+    } catch {
+      /* quota exceeded etc */
+    }
+  }, [chatSessions, history]);
 
   const onAddHistory = (response: EducationResponse) => {
     const item: SidebarItem = {
@@ -98,23 +125,88 @@ export function EducationApp() {
     setResponseStore((prev) => ({ ...prev, [response.id]: response }));
   };
 
+  const activeChatMessages: ChatMessage[] = useMemo(() => {
+    if (!activeChatId) return [];
+    return chatSessions[activeChatId]?.messages ?? [];
+  }, [activeChatId, chatSessions]);
+
+  const handleChatMessagesChange = (next: ChatMessage[]) => {
+    if (next.length === 0) {
+      // reset \u2014 don\u2019t persist an empty session
+      return;
+    }
+    let id = activeChatId;
+    if (!id) {
+      id = `chat_${Date.now()}`;
+      setActiveChatId(id);
+    }
+    const firstUser = next.find((m) => m.role === "user");
+    const title =
+      firstUser?.content?.trim().slice(0, 60) || "New chat";
+    const now = new Date().toISOString();
+    setChatSessions((prev) => ({
+      ...prev,
+      [id!]: {
+        id: id!,
+        title,
+        messages: next,
+        createdAt: prev[id!]?.createdAt ?? now,
+        updatedAt: now,
+      },
+    }));
+    setHistory((prev) => {
+      const item: SidebarItem = { id: id!, title, mode: "chat" };
+      return [item, ...prev.filter((p) => p.id !== id)].slice(0, 25);
+    });
+    setActiveItem(id!);
+  };
+
   const handleNewTask = () => {
     setSolverPrompt("");
     setSolverResult(null);
     setActiveItem(undefined);
     setAttachments([]);
     setVisualizerSeed("");
+    setActiveChatId(null);
   };
 
   const handleSelectItem = (item: SidebarItem) => {
     setMode(item.mode);
     setActiveItem(item.id);
+    if (item.mode === "chat") {
+      setActiveChatId(item.id);
+      setSolverResult(null);
+      return;
+    }
+    setActiveChatId(null);
     const stored = responseStore[item.id];
     if (stored && stored.mode === "solver") {
       setSolverResult(stored);
       setSolverPrompt(stored.prompt);
     } else {
       setSolverResult(null);
+    }
+  };
+
+  const handleDeleteItem = (item: SidebarItem) => {
+    setHistory((prev) => prev.filter((h) => h.id !== item.id));
+    if (item.mode === "chat") {
+      setChatSessions((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      if (activeChatId === item.id) setActiveChatId(null);
+    } else {
+      setResponseStore((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      if (activeItem === item.id) {
+        setActiveItem(undefined);
+        setSolverResult(null);
+      }
     }
   };
 
@@ -131,6 +223,7 @@ export function EducationApp() {
         items={history}
         activeItemId={activeItem}
         onSelect={handleSelectItem}
+        onDelete={handleDeleteItem}
         onNewTask={handleNewTask}
         userLabel="hiyash04+asd1"
       />
@@ -170,8 +263,11 @@ export function EducationApp() {
           )}
           {mode === "chat" && (
             <ChatView
+              key={activeChatId ?? "new-chat"}
               modelChoice={modelChoice}
               setModelChoice={setModelChoice}
+              messages={activeChatMessages}
+              onMessagesChange={handleChatMessagesChange}
             />
           )}
           {mode === "cheatsheet" && (

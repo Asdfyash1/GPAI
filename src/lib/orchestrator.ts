@@ -248,6 +248,7 @@ export async function streamChatResponse(options: {
   messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   modelChoice: ModelChoice;
   deepExplain: boolean;
+  webContext?: string;
 }): Promise<StreamingHandle> {
   const providers = configuredProviders();
   if (options.modelChoice === "demo" || providers.length === 0) {
@@ -258,22 +259,62 @@ export async function streamChatResponse(options: {
   const requested = selectedModel(options.modelChoice ?? "auto");
   const modelName = requested === "local-demo" ? primary.solverModel : requested;
 
-  const system = options.deepExplain
-    ? "You are a STEM tutor in 'Deep Explain' mode. Build a rich, multi-section explainer document. Use markdown headings (## or numbered like '1. ...') to structure the answer into 3-6 sections (Core idea, Formula/Definition, Worked intuition, Examples, Visual intuition, Common mistakes). Use LaTeX for math. End with 2-3 concise follow-up questions in plain bullet form."
-    : "You are a friendly, knowledgeable STEM tutor in a conversational chat. Reply concisely if the question is small-talk, in depth with structure if the topic warrants it. Always use LaTeX for math. Use bullet lists and short headings when helpful.";
+  const lastUser = [...options.messages].reverse().find((m) => m.role === "user");
+  const lastUserText = (lastUser?.content ?? "").trim();
+  const trivial = isTrivialMessage(lastUserText);
+
+  const conversationalSystem =
+    "You are a friendly, knowledgeable STEM tutor in a conversational chat. " +
+    "Mirror the user's tone and length. For greetings, small-talk, confirmations, or short follow-ups, reply briefly and warmly in 1-2 sentences \u2014 do NOT use headings, numbered sections, lists, or LaTeX. " +
+    "For real STEM questions, explain clearly with examples and use LaTeX for math; use lists and short headings only when they aid understanding. " +
+    "Never invent a textbook-length answer when the user did not ask for one. Never start a response with 'Understanding the ...' or any other forced essay framing.";
+
+  const deepExplainSystem =
+    "You are a STEM tutor in 'Deep Explain' mode. " +
+    "IMPORTANT: First decide whether the user's latest message is a substantive STEM question. " +
+    "If it is small-talk, a greeting (e.g. 'hi'), a thank-you, an off-topic remark, or a clarifying meta question, reply briefly and conversationally in 1-2 sentences \u2014 do NOT produce a multi-section document. " +
+    "Only when the user asks a substantive STEM question should you build a rich, multi-section explainer with 3-6 markdown sections (Core idea, Formula/Definition, Worked intuition, Examples, Visual intuition, Common mistakes), LaTeX math, and 2-3 follow-up questions at the end. " +
+    "Never start a response with 'Understanding the ...' or any other forced essay framing.";
+
+  let system = options.deepExplain && !trivial ? deepExplainSystem : conversationalSystem;
+
+  if (options.webContext && options.webContext.trim().length > 0) {
+    system +=
+      "\n\nWeb search context (use this to ground your answer; cite the source URL inline like (source: https://...) when you rely on a snippet):\n" +
+      options.webContext;
+  }
 
   const result = streamText({
     model: buildLanguageModel(primary, modelName),
     system,
     messages: options.messages,
-    temperature: 0.3,
-    maxOutputTokens: 4096,
+    temperature: trivial ? 0.5 : 0.3,
+    maxOutputTokens: trivial ? 256 : 4096,
   });
 
   return {
     textStream: result.textStream,
     text: Promise.resolve(result.text),
   };
+}
+
+const SMALL_TALK_REGEX =
+  /^(hi+|hey+|hello+|yo|sup|hola|namaste|salaam|good\s+(morning|evening|afternoon|night)|thanks+|thank\s*you|ty|tysm|ok(ay)?|cool|nice|great|wow|lol|lmao|bye+|goodbye|see\s*ya|cya|how\s*are\s*you|what'?s\s*up|wassup|sup|test|testing|ping)\b[\s!?.,]*$/i;
+
+function isTrivialMessage(text: string): boolean {
+  if (!text) return true;
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return true;
+  if (SMALL_TALK_REGEX.test(trimmed)) return true;
+  // Treat very short messages with no question mark and no math as small-talk.
+  if (
+    trimmed.length <= 12 &&
+    !/[?]/.test(trimmed) &&
+    !/[=+\-*/^]|\d/.test(trimmed)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 async function demoStream(request: EducationRequest): Promise<StreamingHandle> {
