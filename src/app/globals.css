@@ -1111,6 +1111,24 @@ a {
   color: var(--accent);
   font-size: 11.5px;
   font-weight: 600;
+  cursor: help;
+}
+.cross-checked-pass {
+  background: rgba(46, 204, 113, 0.16);
+  color: rgb(64, 196, 128);
+}
+.cross-checked-minor {
+  background: rgba(255, 196, 0, 0.18);
+  color: rgb(231, 176, 30);
+}
+.cross-checked-fail {
+  background: rgba(231, 76, 60, 0.16);
+  color: rgb(232, 88, 75);
+}
+.cross-checked-pending,
+.cross-checked-skipped {
+  background: rgba(148, 163, 184, 0.16);
+  color: rgb(160, 170, 184);
 }
 
 .bullet-list {

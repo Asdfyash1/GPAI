@@ -52,6 +52,17 @@ export type VerificationSignal = {
   notes: string;
 };
 
+export type CrossCheckStatus = "agree" | "minor" | "disagree" | "skipped";
+
+export type CrossCheckResult = {
+  status: CrossCheckStatus;
+  primaryModel: string;
+  secondaryModel: string;
+  primaryAnswer?: string;
+  secondaryAnswer?: string;
+  notes?: string;
+};
+
 export type SolutionStep = {
   title: string;
   body: string;
@@ -82,6 +93,7 @@ export type EducationResponse = {
   followUps: string[];
   confidence: number;
   verification: VerificationSignal[];
+  crossCheck?: CrossCheckResult;
   createdAt: string;
   imageUrl?: string;
   diagramSpec?: string;

@@ -48,31 +48,64 @@ export async function POST(request: Request) {
     }
   }
 
-  const handle = await streamChatResponse({
-    messages: incomingMessages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    })),
-    modelChoice: body.modelChoice ?? "auto",
-    deepExplain: body.deepExplain ?? false,
-    webContext,
-  });
+  const buildHandle = (modelChoice: ChatRequest["modelChoice"]) =>
+    streamChatResponse({
+      messages: incomingMessages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+      modelChoice,
+      deepExplain: body.deepExplain ?? false,
+      webContext,
+    });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      try {
-        for await (const chunk of handle.textStream) {
-          controller.enqueue(encoder.encode(chunk));
+      const tryStream = async (
+        modelChoice: ChatRequest["modelChoice"],
+      ): Promise<{ ok: boolean; chunks: number; error?: unknown }> => {
+        let chunks = 0;
+        try {
+          const handle = await buildHandle(modelChoice);
+          for await (const chunk of handle.textStream) {
+            chunks++;
+            controller.enqueue(encoder.encode(chunk));
+          }
+          return { ok: true, chunks };
+        } catch (error) {
+          return { ok: false, chunks, error };
         }
+      };
+
+      const primary = await tryStream(body.modelChoice ?? "auto");
+      if (primary.ok) {
         controller.close();
-      } catch (error) {
-        console.error("[chat] stream error:", error);
-        const message =
-          error instanceof Error ? error.message : "Streaming failed.";
-        controller.enqueue(encoder.encode(`\n\n[Error: ${message}]`));
-        controller.close();
+        return;
       }
+
+      // Real-model call failed (quota, 5xx, network). If we never streamed
+      // a single chunk, silently fall back to the offline demo so the user
+      // still gets *something* useful instead of a broken bubble.
+      console.error("[chat] primary stream failed:", primary.error);
+      if (primary.chunks === 0) {
+        controller.enqueue(
+          encoder.encode(
+            "_(Live model is unavailable right now \u2014 falling back to a local demo answer.)_\n\n",
+          ),
+        );
+        const fallback = await tryStream("demo");
+        if (fallback.ok) {
+          controller.close();
+          return;
+        }
+      }
+      const message =
+        primary.error instanceof Error
+          ? primary.error.message
+          : "Streaming failed.";
+      controller.enqueue(encoder.encode(`\n\n[Error: ${message}]`));
+      controller.close();
     },
   });
 

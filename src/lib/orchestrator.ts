@@ -1,6 +1,8 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, streamText } from "ai";
 import type {
+  CrossCheckResult,
+  CrossCheckStatus,
   EducationRequest,
   ModelChoice,
   VerificationSignal,
@@ -241,6 +243,140 @@ export async function streamEducationalSolverDraft(
   return {
     textStream: result.textStream,
     text: Promise.resolve(result.text),
+  };
+}
+
+/**
+ * Run a real cross-check: solve the same problem through a secondary model
+ * and ask a tiny LLM-judge whether the two final answers AGREE / disagree.
+ *
+ * Returns "skipped" if there is no usable secondary model or any step fails.
+ * This is intentionally cheap (one extra solve + one one-token judge call)
+ * and runs after the user has already received the primary streamed answer.
+ */
+export async function runCrossCheckOnAnswer(
+  request: EducationRequest,
+  primaryAnswerText: string,
+): Promise<CrossCheckResult> {
+  const providers = configuredProviders();
+  const primary = providers[0];
+  const primaryModelName = (() => {
+    const requested = selectedModel(request.modelChoice ?? "auto");
+    return requested === "local-demo" ? primary?.solverModel ?? "unknown" : requested;
+  })();
+
+  // Pick a secondary model. Prefer a different *provider* if configured;
+  // otherwise pick a different *model* on the same provider.
+  let secondaryProvider: Provider | undefined;
+  let secondaryModelName: string | undefined;
+  if (providers.length >= 2) {
+    secondaryProvider = providers[1];
+    secondaryModelName = secondaryProvider.solverModel;
+  } else if (primary) {
+    secondaryProvider = primary;
+    const fallback = process.env.NVIDIA_CROSSCHECK_MODEL;
+    const candidates = [
+      fallback,
+      "nvidia/llama-3.3-nemotron-super-49b-v1",
+      "mistralai/mistral-large-3-675b-instruct-2512",
+      "deepseek-ai/deepseek-v4-flash",
+      "meta/llama-3.3-70b-instruct",
+    ].filter(
+      (m): m is string => typeof m === "string" && m !== primaryModelName,
+    );
+    secondaryModelName = candidates[0];
+  }
+
+  if (!secondaryProvider || !secondaryModelName) {
+    return {
+      status: "skipped",
+      primaryModel: primaryModelName,
+      secondaryModel: "(none configured)",
+      notes: "No secondary model available for cross-check.",
+    };
+  }
+
+  let secondaryAnswer = "";
+  try {
+    secondaryAnswer = await generateWithProvider(
+      secondaryProvider,
+      secondaryModelName,
+      "You are an independent STEM solver. Solve the user's problem rigorously and end your reply with a single line of the exact form: FINAL ANSWER: <your final answer>.",
+      request.prompt,
+    );
+  } catch (error) {
+    return {
+      status: "skipped",
+      primaryModel: primaryModelName,
+      secondaryModel: `${secondaryProvider.name}:${secondaryModelName}`,
+      notes:
+        error instanceof Error
+          ? `Secondary model failed: ${error.message}`
+          : "Secondary model failed.",
+    };
+  }
+
+  const extractFinal = (text: string) => {
+    const m = text.match(/FINAL ANSWER:\s*([^\n]+)/i);
+    if (m) return m[1].trim();
+    // fall back to last non-empty line
+    const lines = text
+      .trim()
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    return lines[lines.length - 1] ?? "";
+  };
+  const primaryFinal = extractFinal(primaryAnswerText);
+  const secondaryFinal = extractFinal(secondaryAnswer);
+
+  let status: CrossCheckStatus = "skipped";
+  let notes: string | undefined;
+  try {
+    const judgement = await generateWithProvider(
+      primary,
+      primary.verifierModel,
+      "You are a strict STEM answer comparator. Decide whether two final answers to the SAME problem agree numerically and conceptually.",
+      [
+        "Two AI models answered the SAME problem.",
+        "",
+        "Problem:",
+        request.prompt,
+        "",
+        "Model A final answer:",
+        primaryFinal || primaryAnswerText.slice(-400),
+        "",
+        "Model B final answer:",
+        secondaryFinal || secondaryAnswer.slice(-400),
+        "",
+        "Reply with EXACTLY one of these tokens on the first line and nothing else:",
+        "AGREE      (same final answer / same conclusion)",
+        "MINOR      (off by rounding, units, or trivially equivalent)",
+        "DISAGREE   (genuinely different conclusions)",
+      ].join("\n"),
+    );
+    const token = judgement.trim().split(/\s+/)[0]?.toUpperCase() ?? "";
+    if (token === "AGREE") status = "agree";
+    else if (token === "MINOR") status = "minor";
+    else if (token === "DISAGREE") status = "disagree";
+    else {
+      status = "skipped";
+      notes = `Comparator returned an unexpected token: ${token.slice(0, 32)}`;
+    }
+  } catch (error) {
+    notes =
+      error instanceof Error
+        ? `Comparator failed: ${error.message}`
+        : "Comparator failed.";
+  }
+
+  return {
+    status,
+    primaryModel: primaryModelName,
+    secondaryModel: `${secondaryProvider.name}:${secondaryModelName}`,
+    primaryAnswer: primaryFinal || undefined,
+    secondaryAnswer: secondaryFinal || undefined,
+    notes,
   };
 }
 

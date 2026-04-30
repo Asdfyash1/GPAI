@@ -26,7 +26,15 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 
 ## High priority — gpai.app feature parity / outperform
 
-- [ ] **Make the "Cross-checked" badge real, not decorative.** Today it's always shown next to the Answer. Implement a second-model verification pass (re-run the SAME problem through a secondary model from the Provider list) and surface a tri-state badge: `green` (both models agree), `yellow` (minor numerical diff), `red` (disagreement — show both candidate answers). Expose the actual model names in a tooltip. _Files to touch:_ `src/lib/orchestrator.ts` (add `runCrossCheck` helper), `src/app/api/educate/stream/route.ts` (run cross-check after the main solve completes, push as a final SSE chunk), `src/components/SolverView.tsx:236-248` (render tri-state badge).
+- [x] **"Cross-checked" badge is real, not decorative.** After the primary stream completes, the streaming route runs a real second-model solve (a different model on the same provider, configurable via `NVIDIA_CROSSCHECK_MODEL`, falling back to nemotron→mistral→deepseek→llama) and asks an LLM judge to compare the two final answers. Tri-state badge:
+  - `Cross-checked` (green) — models agree
+  - `Minor mismatch` (amber) — equivalent up to rounding/units
+  - `Models disagree` (red) — genuinely different conclusions, both shown in the tooltip
+  - `Verifying` (grey) — request still in flight
+  - `Cross-check skipped` (grey) — no secondary model configured or verifier failed
+
+  _Files:_ `src/lib/orchestrator.ts` (`runCrossCheckOnAnswer`), `src/app/api/educate/stream/route.ts` (runs cross-check after the stream and emits it in the structured tail), `src/components/SolverView.tsx` (`CrossCheckBadge` component), `src/types/education.ts` (`CrossCheckResult`), `src/app/globals.css` (.cross-checked-pass / -minor / -fail / -pending / -skipped).
+- [x] **Quota fallback to demo mode in chat.** When the primary NVIDIA call fails before sending a single chunk (e.g. 429 rate limit, upstream 5xx), the chat route silently retries with `modelChoice: "demo"` and emits a one-line "live model unavailable, falling back to a local demo answer" notice. _File:_ `src/app/api/chat/route.ts`.
 - [ ] **Shareable task URL.** gpai.app gives every solve a canonical URL like `/chat/s?id=tsk_<ts>_<rand>`. Today our solves only live in localStorage — they can't be linked. Mint an id at solve-completion, persist server-side (or a `?taskId=…` URL fragment that hydrates from localStorage), and add a real Share button next to the solve title.
 - [ ] **In-context follow-up composer wired to the original problem.** Today `QUICK_CHIPS` (Make it easy / List key concepts / etc.) and the right-rail input call `handleQuickAction(label)` which re-issues the prompt as `"<chip>: <original problem>"` — but the conversation thread is lost. Replace with a chat thread anchored to the solve so the user sees a real Q&A timeline below the answer instead of replacing the whole solver view on every chip click.
 - [ ] **Quiz tab generates real MCQs.** Today the Quiz tab has a single "+ Create new" button that re-prompts with `"Generate a 5-question quiz with answers from this problem."` and replaces the whole view. Make it stream MCQs into a structured component with hidden answers and a "Reveal" button per question (gpai.app pattern).
@@ -77,7 +85,7 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec):** Created this file. Done so far:
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — PR #8 (merged):** Created this file. Done so far:
   - Small-talk gate for chat (`isTrivialMessage`).
   - `next.config.ts allowedDevOrigins` fix — was the root cause of "tabs unclickable" (Next.js 16 was blocking HMR for non-localhost hosts so handlers never attached).
   - Web search backend + DDG HTML SERP fallback for sparse Instant Answer queries.
@@ -87,3 +95,8 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
   - Fixed chat history wiped on reload (persist-after-hydrate guard).
   - Plain Enter sends in chat; Shift+Enter newline.
   - End-to-end verified: tab switching, "hi" + Deep Explain → 21-char reply, integration-by-parts → LaTeX answer, F5 reload preserves Recent + click-restores thread, `/api/web-search` returns real Wikipedia URLs.
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — follow-up PR (cross-check + quota fallback):**
+  - Real cross-check pipeline: `runCrossCheckOnAnswer` in `orchestrator.ts` solves the problem with a secondary model, then asks an LLM judge to label `AGREE / MINOR / DISAGREE`. The streaming route awaits this after the user has the primary answer and emits it in the structured tail.
+  - Replaced the always-green "Cross-checked" pill with a real `CrossCheckBadge` component (5 states: pass / minor / fail / pending / skipped) including a tooltip with both candidate answers when models disagree.
+  - Added `crossCheck?: CrossCheckResult` to the `EducationResponse` type and matching CSS variants.
+  - Quota fallback in `/api/chat`: if the primary NVIDIA call dies before a single chunk streams, silently fall back to the demo provider with a one-line notice instead of leaving the user staring at an error bubble.
