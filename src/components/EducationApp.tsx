@@ -95,6 +95,23 @@ export function EducationApp() {
       if (nextHistory) setHistory(nextHistory);
       if (nextStore) setResponseStore(nextStore);
       if (nextChats) setChatSessions(nextChats);
+
+      // Honor a shared `?taskId=…` link: open the matching solve / chat.
+      const taskId = new URLSearchParams(window.location.search).get("taskId");
+      if (taskId) {
+        const stored = nextStore?.[taskId];
+        if (stored) {
+          setMode(stored.mode);
+          setActiveItem(taskId);
+          setSolverResult(stored);
+          setSolverPrompt(stored.prompt);
+        } else if (nextChats?.[taskId]) {
+          setMode("chat");
+          setActiveItem(taskId);
+          activeChatIdRef.current = taskId;
+          setActiveChatId(taskId);
+        }
+      }
     });
   }, []);
 

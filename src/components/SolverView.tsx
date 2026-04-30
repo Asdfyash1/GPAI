@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowUp,
+  Check,
   CheckCircle2,
   Clock,
   Copy,
@@ -133,6 +134,8 @@ export function SolverView(props: SolverViewProps) {
           isStreaming={stream.isStreaming}
           error={stream.error}
           result={props.result}
+          setResult={props.setResult}
+          modelChoice={props.modelChoice}
           onChip={handleQuickAction}
           onVisualize={props.onVisualize}
         />
@@ -190,6 +193,8 @@ function SolverResult({
   isStreaming,
   error,
   result,
+  setResult,
+  modelChoice,
   onChip,
   onVisualize,
 }: {
@@ -197,11 +202,48 @@ function SolverResult({
   isStreaming: boolean;
   error: string | null;
   result: EducationResponse | null;
+  setResult: (r: EducationResponse | null) => void;
+  modelChoice: ModelChoice;
   onChip: (chip: string) => void;
   onVisualize: (prompt: string) => void;
 }) {
   const [tab, setTab] = useState<"followups" | "quiz">("followups");
   const [chatInput, setChatInput] = useState("");
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizError, setQuizError] = useState<string | null>(null);
+
+  const handleGenerateQuiz = async () => {
+    if (!result) return;
+    setQuizLoading(true);
+    setQuizError(null);
+    try {
+      const res = await fetch("/api/quiz", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: result.prompt,
+          solutionContext: result.solution,
+          count: 5,
+          modelChoice,
+        }),
+      });
+      const data = (await res.json()) as
+        | { quiz: { question: string; answer: string }[] }
+        | { error: string };
+      if (!res.ok || "error" in data) {
+        setQuizError(
+          "error" in data ? data.error : `Quiz request failed (${res.status}).`,
+        );
+        return;
+      }
+      const merged = [...(result.quiz ?? []), ...data.quiz];
+      setResult({ ...result, quiz: merged });
+    } catch (err) {
+      setQuizError(err instanceof Error ? err.message : "Quiz request failed.");
+    } finally {
+      setQuizLoading(false);
+    }
+  };
 
   const text = result?.solution || streamText || "";
 
@@ -219,9 +261,7 @@ function SolverResult({
                 <button className="icon-button" type="button" aria-label="Download">
                   <Download size={16} />
                 </button>
-                <button className="icon-button" type="button" aria-label="Share">
-                  <LinkIcon size={16} />
-                </button>
+                <ShareButton id={result.id} title={result.title} />
               </div>
             </div>
           </header>
@@ -398,11 +438,22 @@ function SolverResult({
             <button
               type="button"
               className="primary-button"
-              disabled={!result}
-              onClick={() => onChip("Generate a 5-question quiz with answers from this problem.")}
+              disabled={!result || quizLoading}
+              onClick={handleGenerateQuiz}
             >
-              + Create new
+              {quizLoading
+                ? "Generating quiz…"
+                : result?.quiz && result.quiz.length > 0
+                  ? "+ Add 5 more questions"
+                  : "+ Generate quiz"}
             </button>
+            {quizError && <p className="error-text">{quizError}</p>}
+            {result?.quiz && result.quiz.length > 0 && (
+              <p className="rail-helper">
+                {result.quiz.length} question{result.quiz.length === 1 ? "" : "s"}{" "}
+                ready below — scroll to the &ldquo;Quick quiz&rdquo; section.
+              </p>
+            )}
           </div>
         )}
       </aside>
@@ -417,6 +468,41 @@ const THINKING_STEPS = [
   "Working through the steps…",
   "Cross-checking the answer…",
 ];
+
+function ShareButton({ id, title }: { id: string; title?: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleClick = async () => {
+    if (typeof window === "undefined") return;
+    const url = `${window.location.origin}${window.location.pathname}?taskId=${encodeURIComponent(id)}`;
+    try {
+      if (navigator.share) {
+        await navigator
+          .share({ title: title ?? "eduForge solve", url })
+          .catch(() => {
+            /* user cancelled — fall through to clipboard */
+          });
+      }
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <button
+      className="icon-button"
+      type="button"
+      aria-label={copied ? "Link copied" : "Copy share link"}
+      title={copied ? "Link copied" : "Copy share link"}
+      onClick={handleClick}
+    >
+      {copied ? <Check size={16} /> : <LinkIcon size={16} />}
+    </button>
+  );
+}
 
 function CrossCheckBadge({ result }: { result: EducationResponse }) {
   const cc = result.crossCheck;
