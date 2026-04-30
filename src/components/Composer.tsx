@@ -70,13 +70,27 @@ export function Composer(props: ComposerProps) {
       const list = Array.from(files);
       const next: UploadedAsset[] = [];
       for (const file of list) {
-        const dataUrl = await readAsDataUrl(file);
+        // Compress large images client-side so we never blow past Vercel's
+        // 4.5 MB request body limit and so the vision API responds in <30s.
+        // PDFs and text files are passed through untouched.
+        let payload: { dataUrl: string; size: number; type: string } = {
+          dataUrl: await readAsDataUrl(file),
+          size: file.size,
+          type: file.type,
+        };
+        if (file.type.startsWith("image/")) {
+          try {
+            payload = await compressImageIfLarge(file, payload.dataUrl);
+          } catch {
+            // fall through with the original dataUrl if anything goes wrong
+          }
+        }
         next.push({
           name: file.name,
-          type: file.type,
-          size: file.size,
-          dataUrl,
-          preview: file.type.startsWith("image/") ? dataUrl : undefined,
+          type: payload.type,
+          size: payload.size,
+          dataUrl: payload.dataUrl,
+          preview: payload.type.startsWith("image/") ? payload.dataUrl : undefined,
         });
       }
       props.onAttachmentsChange([...props.attachments, ...next]);
@@ -277,5 +291,69 @@ function readAsDataUrl(file: File): Promise<string> {
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
+  });
+}
+
+const COMPRESS_THRESHOLD_BYTES = 1_000_000; // 1 MB original
+const COMPRESS_MAX_EDGE = 1600;
+const COMPRESS_QUALITY = 0.85;
+
+async function compressImageIfLarge(
+  file: File,
+  originalDataUrl: string,
+): Promise<{ dataUrl: string; size: number; type: string }> {
+  // Skip work for already-small images and SVGs (which would rasterize badly).
+  if (file.size < COMPRESS_THRESHOLD_BYTES) {
+    return { dataUrl: originalDataUrl, size: file.size, type: file.type };
+  }
+  if (file.type === "image/svg+xml" || file.type === "image/gif") {
+    return { dataUrl: originalDataUrl, size: file.size, type: file.type };
+  }
+  if (typeof document === "undefined") {
+    return { dataUrl: originalDataUrl, size: file.size, type: file.type };
+  }
+
+  const img = await loadImage(originalDataUrl);
+  const longEdge = Math.max(img.width, img.height);
+  if (longEdge <= COMPRESS_MAX_EDGE && file.size < 3_000_000) {
+    // Image is already small enough on both axes; only compress huge files.
+    return { dataUrl: originalDataUrl, size: file.size, type: file.type };
+  }
+  const scale = longEdge > COMPRESS_MAX_EDGE ? COMPRESS_MAX_EDGE / longEdge : 1;
+  const targetWidth = Math.round(img.width * scale);
+  const targetHeight = Math.round(img.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return { dataUrl: originalDataUrl, size: file.size, type: file.type };
+  }
+  // White background so JPEG re-encoding of PNGs with transparency stays legible.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+  ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+  const compressedDataUrl = canvas.toDataURL("image/jpeg", COMPRESS_QUALITY);
+  // base64 length × 0.75 ≈ raw bytes; the prefix `data:image/jpeg;base64,` is ~23 chars.
+  const approxBytes = Math.round((compressedDataUrl.length - 23) * 0.75);
+  if (approxBytes >= file.size) {
+    // Don't grow the file if compression somehow made it bigger.
+    return { dataUrl: originalDataUrl, size: file.size, type: file.type };
+  }
+  return {
+    dataUrl: compressedDataUrl,
+    size: approxBytes,
+    type: "image/jpeg",
+  };
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to decode image for compression"));
+    img.src = src;
   });
 }

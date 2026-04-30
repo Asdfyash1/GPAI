@@ -1,4 +1,5 @@
 import type { EducationRequest } from "@/types/education";
+import { ATTACHMENT_FAILURE_PREFIX } from "@/lib/vision";
 
 export const textbookSystemPrompt = `You are the primary STEM textbook engine for an educational copilot.
 
@@ -18,7 +19,8 @@ Non-negotiable output principles:
 11. Under "Similar practice", give 2-3 fresh problems at the same level (no answers).
 12. If the prompt is genuinely tiny (e.g. "What is 2+2?"), keep every section tight \u2014 do NOT pad. Quality over length.
 13. If a required value is missing, state the assumption clearly in "Problem" and proceed.
-14. Never invent citations, never copy third-party product text or branding, never write "As an AI..." disclaimers.`;
+14. Never invent citations, never copy third-party product text or branding, never write "As an AI..." disclaimers.
+15. **Attachments policy:** If the user supplies attachments AND the user's text alone would not be a self-contained problem (e.g. "Solve this", "Explain", just an image), you must rely on the attached transcription. If any attachment block begins with "${ATTACHMENT_FAILURE_PREFIX}" the attachment could NOT be read by the server. In that case do NOT invent a problem. Reply with one short paragraph that names the failure reason and asks the user to re-upload (smaller image / clearer photo / typed text). Skip every other section.`;
 
 const chatSystemPrompt = `You are a friendly, knowledgeable STEM tutor in a conversational AI chat.
 
@@ -192,6 +194,12 @@ export function getSystemPrompt(mode: string): string {
 }
 
 export function buildTaskPrompt(request: EducationRequest) {
+  const hasUnreadable = request.attachments.some(
+    (file) => file.extractedText?.startsWith(ATTACHMENT_FAILURE_PREFIX),
+  );
+  const failureBanner = hasUnreadable
+    ? `\n\n[SERVER NOTICE] One or more attachments could not be read. Per Attachments policy, do NOT invent a problem. Reply only with a short apology + the failure reason + ask the user to re-upload a smaller / clearer file (or paste the text). Do NOT produce the standard sectioned answer.\n`
+    : "";
   const attachmentSummary =
     request.attachments.length === 0
       ? ""
@@ -203,7 +211,8 @@ export function buildTaskPrompt(request: EducationRequest) {
                 file.extractedText ? `\nImage/document analysis:\n${file.extractedText}` : ""
               }`,
           )
-          .join("; ");
+          .join("; ") +
+        failureBanner;
 
   if (request.mode === "chat") {
     return `${request.prompt}${attachmentSummary}`;
