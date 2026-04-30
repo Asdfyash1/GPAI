@@ -407,11 +407,26 @@ async function describeImage(asset: UploadedAsset): Promise<string> {
   }
 
   const errors: string[] = [];
-  const providers: Array<() => Promise<ProviderResult | null>> = [
-    () => tryNvidia(asset),
-    () => tryGemini(asset),
-    () => tryTesseract(asset),
-  ];
+
+  // Provider ordering: Gemini 2.0 Flash is dramatically more accurate on
+  // handwritten math than NIM's free-tier Llama-3.2-11B-Vision (NIM 11B
+  // frequently misreads subtle exponents/subscripts and returns confidently
+  // wrong transcripts — which this chain would previously accept on the first
+  // `ok: true` and never try Gemini at all). So when GEMINI_API_KEY is
+  // configured, prefer Gemini as the primary provider and keep NVIDIA as the
+  // fallback. This only affects which provider runs first; the "first ok
+  // wins" semantics are unchanged. Tesseract.js is always the last resort.
+  const providers: Array<() => Promise<ProviderResult | null>> = geminiApiKey()
+    ? [
+        () => tryGemini(asset),
+        () => tryNvidia(asset),
+        () => tryTesseract(asset),
+      ]
+    : [
+        () => tryNvidia(asset),
+        () => tryGemini(asset),
+        () => tryTesseract(asset),
+      ];
 
   for (const run of providers) {
     let result: ProviderResult | null;
