@@ -658,7 +658,7 @@ function ShareButton({ id, title }: { id: string; title?: string }) {
     try {
       if (navigator.share) {
         await navigator
-          .share({ title: title ?? "eduForge solve", url })
+          .share({ title: title ?? "Forge solve", url })
           .catch(() => {
             /* user cancelled — fall through to clipboard */
           });

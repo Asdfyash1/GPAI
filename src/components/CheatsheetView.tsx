@@ -310,17 +310,10 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
             <button
               type="button"
               className="icon-button"
-              onClick={() => {
-                const blob = new Blob([content], { type: "text/markdown" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "cheatsheet.md";
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
+              onClick={handlePrint}
               disabled={!content}
-              aria-label="Download markdown"
+              aria-label="Download as PDF"
+              title="Download as PDF"
             >
               <Download size={14} />
             </button>

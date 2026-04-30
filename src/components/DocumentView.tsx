@@ -120,16 +120,10 @@ export function DocumentView({
           <button
             type="button"
             className="icon-button"
-            aria-label="Download markdown"
-            onClick={() => {
-              const blob = new Blob([content], { type: "text/markdown" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `${mode}-${Date.now()}.md`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
+            aria-label="Download as PDF"
+            title="Download as PDF"
+            onClick={handlePrint}
+            disabled={!content}
           >
             <Download size={14} />
           </button>

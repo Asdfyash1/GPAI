@@ -34,6 +34,23 @@ export function PdfNotesView({ modelChoice, setModelChoice }: PdfNotesViewProps)
   const [content, setContent] = useState("");
   const [docTitle, setDocTitle] = useState("");
   const stream = useStream();
+
+  const handlePrint = () => {
+    if (!content) return;
+    let backstopTimer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => {
+      if (backstopTimer) clearTimeout(backstopTimer);
+      document.body.removeAttribute("data-printing");
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    document.body.setAttribute("data-printing", "document");
+    requestAnimationFrame(() => {
+      window.print();
+      // Backstop in case afterprint never fires (some mobile browsers).
+      backstopTimer = setTimeout(cleanup, 4000);
+    });
+  };
   const fileInput = useRef<HTMLInputElement>(null);
 
   const handlePdfPick = async (file: File) => {
@@ -194,38 +211,17 @@ export function PdfNotesView({ modelChoice, setModelChoice }: PdfNotesViewProps)
                 type="button"
                 className="primary-button"
                 disabled={!content}
-                onClick={() => {
-                  if (!content) return;
-                  let backstopTimer: ReturnType<typeof setTimeout> | undefined;
-                  const cleanup = () => {
-                    if (backstopTimer) clearTimeout(backstopTimer);
-                    document.body.removeAttribute("data-printing");
-                    window.removeEventListener("afterprint", cleanup);
-                  };
-                  window.addEventListener("afterprint", cleanup);
-                  document.body.setAttribute("data-printing", "document");
-                  requestAnimationFrame(() => {
-                    window.print();
-                    // Backstop in case afterprint never fires (some mobile browsers).
-                    backstopTimer = setTimeout(cleanup, 4000);
-                  });
-                }}
+                onClick={handlePrint}
               >
                 <Printer size={14} /> Print / PDF
               </button>
               <button
                 type="button"
                 className="icon-button"
-                aria-label="Download markdown"
-                onClick={() => {
-                  const blob = new Blob([content], { type: "text/markdown" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `pdf-notes-${Date.now()}.md`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
+                aria-label="Download as PDF"
+                title="Download as PDF"
+                disabled={!content}
+                onClick={handlePrint}
               >
                 <Download size={14} />
               </button>
