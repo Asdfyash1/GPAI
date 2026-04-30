@@ -415,9 +415,7 @@ export async function streamChatResponse(options: {
   let system = options.deepExplain && !trivial ? deepExplainSystem : conversationalSystem;
 
   if (options.webContext && options.webContext.trim().length > 0) {
-    system +=
-      "\n\nWeb search context (use this to ground your answer; cite the source URL inline like (source: https://...) when you rely on a snippet):\n" +
-      options.webContext;
+    system += "\n\nWeb search context:\n" + options.webContext;
   }
 
   const result = streamText({

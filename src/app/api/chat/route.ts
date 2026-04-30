@@ -1,6 +1,7 @@
 import { streamChatResponse } from "@/lib/orchestrator";
 import { analyzeUploadedImages } from "@/lib/vision";
 import { formatWebContext, searchWeb } from "@/lib/web-search";
+import type { SearchResult } from "@/lib/web-search";
 import type { ChatRequest, UploadedAsset } from "@/types/education";
 
 export const runtime = "nodejs";
@@ -37,11 +38,12 @@ export async function POST(request: Request) {
   }
 
   let webContext: string | undefined;
+  let webResults: SearchResult[] = [];
   if (body.webEnabled && lastUser?.content) {
     try {
-      const results = await searchWeb(lastUser.content, 5);
-      if (results.length > 0) {
-        webContext = formatWebContext(results);
+      webResults = await searchWeb(lastUser.content, 5);
+      if (webResults.length > 0) {
+        webContext = formatWebContext(webResults);
       }
     } catch (err) {
       console.error("[chat] web search failed:", err);
@@ -60,6 +62,14 @@ export async function POST(request: Request) {
     });
 
   const encoder = new TextEncoder();
+
+  // If we have web results, append them as a JSON trailer after the text stream
+  // so the client can parse and render Sources pills.
+  const sourcesTrailer =
+    webResults.length > 0
+      ? "\n\n<!-- SOURCES:" + JSON.stringify(webResults) + ":SOURCES -->"
+      : "";
+
   const stream = new ReadableStream({
     async start(controller) {
       const tryStream = async (
@@ -80,6 +90,9 @@ export async function POST(request: Request) {
 
       const primary = await tryStream(body.modelChoice ?? "auto");
       if (primary.ok) {
+        if (sourcesTrailer) {
+          controller.enqueue(encoder.encode(sourcesTrailer));
+        }
         controller.close();
         return;
       }
@@ -91,11 +104,14 @@ export async function POST(request: Request) {
       if (primary.chunks === 0) {
         controller.enqueue(
           encoder.encode(
-            "_(Live model is unavailable right now \u2014 falling back to a local demo answer.)_\n\n",
+            "_(Live model is unavailable right now — falling back to a local demo answer.)_\n\n",
           ),
         );
         const fallback = await tryStream("demo");
         if (fallback.ok) {
+          if (sourcesTrailer) {
+            controller.enqueue(encoder.encode(sourcesTrailer));
+          }
           controller.close();
           return;
         }
