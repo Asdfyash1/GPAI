@@ -207,6 +207,9 @@ function SolverResult({
   const [chatInput, setChatInput] = useState("");
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
+  const [quizFormat, setQuizFormat] = useState<"mixed" | "mcq" | "short">(
+    "mixed",
+  );
   // In-context follow-up thread anchored to this solve. Each entry is a
   // Q/A pair; the answer streams in chunk-by-chunk into `a`.
   type ThreadTurn = {
@@ -318,10 +321,11 @@ function SolverResult({
           solutionContext: result.solution,
           count: 5,
           modelChoice,
+          format: quizFormat,
         }),
       });
       const data = (await res.json()) as
-        | { quiz: { question: string; answer: string }[] }
+        | { quiz: { question: string; answer: string; choices?: string[] }[] }
         | { error: string };
       if (!res.ok || "error" in data) {
         setQuizError(
@@ -429,7 +433,12 @@ function SolverResult({
             <h2 className="section-heading">Quick quiz</h2>
             <ol className="quiz-list">
               {result.quiz.map((q, i) => (
-                <QuizItem key={i} question={q.question} answer={q.answer} />
+                <QuizItem
+                  key={i}
+                  question={q.question}
+                  answer={q.answer}
+                  choices={q.choices}
+                />
               ))}
             </ol>
           </section>
@@ -565,6 +574,23 @@ function SolverResult({
               <Sparkles size={24} />
               <p>Review with a quick quiz / flashcard</p>
             </div>
+            <label className="rail-field">
+              <span className="rail-field-label">Format</span>
+              <select
+                className="select-control"
+                value={quizFormat}
+                onChange={(e) =>
+                  setQuizFormat(
+                    e.target.value as "mixed" | "mcq" | "short",
+                  )
+                }
+                disabled={quizLoading}
+              >
+                <option value="mixed">Mixed (MCQ + short answer)</option>
+                <option value="mcq">Multiple choice only</option>
+                <option value="short">Short answer only</option>
+              </select>
+            </label>
             <button
               type="button"
               className="primary-button"
@@ -728,8 +754,79 @@ function ThinkingProcess() {
   );
 }
 
-function QuizItem({ question, answer }: { question: string; answer: string }) {
+function QuizItem({
+  question,
+  answer,
+  choices,
+}: {
+  question: string;
+  answer: string;
+  choices?: string[];
+}) {
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const isMcq = Array.isArray(choices) && choices.length >= 3;
+
+  if (isMcq) {
+    const submitted = selected !== null;
+    return (
+      <li className="quiz-item quiz-item-mcq">
+        <div className="quiz-question">
+          <MathMarkdown content={question} />
+        </div>
+        <ul className="quiz-choices">
+          {choices!.map((c, i) => {
+            const letter = String.fromCharCode(65 + i);
+            const isCorrect = c === answer;
+            const isPicked = c === selected;
+            const reveal = submitted;
+            const stateClass = !reveal
+              ? ""
+              : isCorrect
+                ? "is-correct"
+                : isPicked
+                  ? "is-wrong"
+                  : "";
+            return (
+              <li key={i} className={`quiz-choice ${stateClass}`}>
+                <button
+                  type="button"
+                  className="quiz-choice-button"
+                  disabled={submitted}
+                  onClick={() => setSelected(c)}
+                  aria-pressed={isPicked}
+                >
+                  <span className="quiz-choice-letter">{letter}</span>
+                  <span className="quiz-choice-text">
+                    <MathMarkdown content={c} />
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {submitted && (
+          <div className="quiz-feedback">
+            {selected === answer ? (
+              <span className="quiz-feedback-correct">Correct.</span>
+            ) : (
+              <span className="quiz-feedback-wrong">
+                Not quite. Correct answer: <strong>{answer}</strong>
+              </span>
+            )}
+            <button
+              type="button"
+              className="quiz-retry"
+              onClick={() => setSelected(null)}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+      </li>
+    );
+  }
+
   return (
     <li className="quiz-item">
       <div className="quiz-question">
