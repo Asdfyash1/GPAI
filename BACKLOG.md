@@ -25,7 +25,7 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
   - _Test image used:_ `~/attachments/9300a84a-8b57-4f0e-8366-34903ce7b721/763a6d0e-5169-4e94-906f-3884c39a546a.png` (handwritten `(D⁴ − 2D³ + D²)y = x³`, 1.95 MB on disk, 2.6 MB as base64).
   - _Pass criteria:_ on Vercel preview, uploading the same image → Solver streams a real solution that explicitly references the operator equation, gives `y_c = c₁ + c₂x + (c₃ + c₄x)e^x`, and computes a degree-5 particular integral for `x³`.
 
-- [ ] **🚨 Mobile print backstop missing in 3 of 4 print handlers.** Devin Review on PR #19 (already merged) flagged that `afterprint` doesn't always fire on mobile browsers, leaving `body[data-printing="document"|"notebook"|"pdf-notes"]` set forever, which means `@media print { *:not(...) { visibility: hidden } }` blanks the *entire app* until a full page reload. `CheatsheetView` already has a 4 s backstop; `DocumentView`, `NotebookView`, `PdfNotesView` do not. **Fix:** in each handler, replace
+- [x] **🚨 Mobile print backstop missing in 3 of 4 print handlers.** _Fixed in PR #23 (2026-04-30)._ Devin Review on PR #19 (already merged) flagged that `afterprint` doesn't always fire on mobile browsers, leaving `body[data-printing="document"|"notebook"|"pdf-notes"]` set forever, which means `@media print { *:not(...) { visibility: hidden } }` blanks the *entire app* until a full page reload. `CheatsheetView` already has a 4 s backstop; `DocumentView`, `NotebookView`, `PdfNotesView` do not. **Fix:** in each handler, replace
   ```ts
   window.addEventListener("afterprint", cleanup);
   setTimeout(() => window.print(), 50);
@@ -150,6 +150,9 @@ After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="crea
 - **PR #19 (PDF export, merged):** print backstop finding — captured as the second Critical bug above.
 
 ## Changelog (append-only — every session adds an entry)
+
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — mobile print backstop:** PR #23.
+  - `DocumentView`, `NotebookView`, `PdfNotesView` print handlers now register a `setTimeout(cleanup, 4000)` backstop alongside the `afterprint` listener and replace `setTimeout(window.print, 50)` with `requestAnimationFrame(window.print)`. Matches the pattern `CheatsheetView` already used. Closes the second critical bug (PR #19 Devin Review finding) — `body[data-printing]` will no longer get stuck on mobile browsers that never fire `afterprint`, so the UI can't get blanked indefinitely after a print attempt.
 
 - **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec) — image-upload Solver fix:** PR #22.
   - **Composer client-side image compression.** Images > 1 MB or > 1600 px on long edge are downscaled to 1600 px max edge and re-encoded as JPEG q=0.85 onto a hidden canvas before being base64'd into the dataURL. PDFs and text files passed through untouched. Cuts a 2.6 MB photo to ~250 KB so it fits Vercel's 4.5 MB body limit and the vision call returns in ~10s instead of timing out.
