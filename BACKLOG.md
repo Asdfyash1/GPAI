@@ -22,6 +22,7 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 - [x] **Tightened system prompts for Chat / Solver / Visualizer / Cheatsheet / Report / PDF Notes / Notebook.** Anti-padding, no fake citations, strict LaTeX rules, no "As an AI…" / "Understanding the …" essay framings. _File:_ `src/lib/prompts.ts`.
 - [x] **Chat duplicates every reply as a separate sidebar entry.** `handleChatMessagesChange` was minting a new `chat_<ts>` id on every call because the second call's closure still saw `activeChatId === null` (React hadn't committed the first `setActiveChatId`). _Fix:_ added `activeChatIdRef` mirror to read the freshly minted id synchronously. _File:_ `src/components/EducationApp.tsx`.
 - [x] **Plain Enter sends in chat (Shift+Enter newline); long-form prompts still need Cmd/Ctrl+Enter.** Composer now takes an `enterToSend` prop wired from `ChatView`. _Files:_ `src/components/Composer.tsx:54-60,94-105`, `src/components/ChatView.tsx:155`.
+- [x] **Chat history was being wiped on every page reload.** The persist-on-change `useEffect`s ran for the initial empty state BEFORE the load step (which was `queueMicrotask`-deferred), overwriting localStorage with `[]`. Added a `hydrated` ref the persist effects check; they no-op until the load step has populated state. Verified by sending a chat, hitting F5, and seeing the Recent entry survive + click-to-resume the thread. _File:_ `src/components/EducationApp.tsx:53-129`.
 
 ## High priority — gpai.app feature parity / outperform
 
@@ -76,4 +77,13 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec):** Created this file. Done so far: small-talk gate for chat, web search backend + DDG HTML fallback, prompts polish, chat history persistence, `next.config.ts allowedDevOrigins` fix.
+- **2026-04-30 — Devin (session c9b3978799c6407c9f7acc3acb4173ec):** Created this file. Done so far:
+  - Small-talk gate for chat (`isTrivialMessage`).
+  - `next.config.ts allowedDevOrigins` fix — was the root cause of "tabs unclickable" (Next.js 16 was blocking HMR for non-localhost hosts so handlers never attached).
+  - Web search backend + DDG HTML SERP fallback for sparse Instant Answer queries.
+  - Tightened prompts across all features.
+  - Chat history persistence: localStorage + sidebar Recent + per-mode badge + click-resume + delete.
+  - Fixed duplicate sidebar entries on every assistant reply (`activeChatIdRef` mirror).
+  - Fixed chat history wiped on reload (persist-after-hydrate guard).
+  - Plain Enter sends in chat; Shift+Enter newline.
+  - End-to-end verified: tab switching, "hi" + Deep Explain → 21-char reply, integration-by-parts → LaTeX answer, F5 reload preserves Recent + click-restores thread, `/api/web-search` returns real Wikipedia URLs.
