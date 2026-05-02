@@ -93,6 +93,18 @@ export type PracticeItem = {
    * (must match one of the strings in `choices` exactly).
    */
   choices?: string[];
+  /**
+   * Optional one-sentence explanation of WHY the correct answer is right.
+   * Surfaced automatically below an MCQ once the user picks an answer,
+   * and behind the show-answer toggle for short-answer questions.
+   */
+  explanation?: string;
+  /**
+   * Optional terse nudge that points the student toward the right
+   * concept WITHOUT revealing the answer. Surfaced behind a `Hint`
+   * button in the Solver Quiz panel.
+   */
+  hint?: string;
 };
 
 export type EducationResponse = {

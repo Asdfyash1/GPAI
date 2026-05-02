@@ -23,16 +23,7 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
   5. `README.md` env-var section + `scripts/test-vision.ts` provider log updated.
   - PDF path is **unchanged**: `unpdf` text extraction (works for digital-native PDFs). Scanned PDFs still surface the existing "re-upload as PNG/JPG" failure message — the Nemotron Omni call only accepts `image_url` content, not raw PDF bytes. Per-page rasterization + Nemotron OCR is a future enhancement (would require either bundling pdf.js's canvas factory in Node or shelling to poppler/pdftoppm; tracked separately).
 
-- [ ] **🚨 Quiz JSON parse failure ("Could not parse quiz JSON. Got: …").** _Reported 2026-05-02 by user (session 1fcd2760b5f2450ab653b9bf5ad563ee). Do NOT fix until user confirms — captured here for tracking only._ When the user clicked "Review with a quick quiz / flashcard" → "Mixed (MCQ + short answer)" → "Add 5 more questions" against a solved ODE problem, the UI showed:
-  ```
-  Could not parse quiz JSON. Got: {"quiz":[{"question":"What is the order of the differential equation given by \\((D-2D^{3}+D^{2})y=x^{3}\\)","answer":"3","choices":["1","2","3","4"]},{"question":"Describe the general approach to solvi
-  ```
-  The JSON is **truncated mid-string** ("solvi" is half of "solving") — clear sign that the response was cut off (token-limit truncation, stream aborted early, or the parser tried to `JSON.parse` a partial chunk before the stream finished). **Likely root causes to investigate when fixing:**
-  1. `/api/quiz` route is probably not waiting for `stream` to finish before parsing — handle it the same way `/api/educate/stream` does (accumulate chunks → parse once at end), OR use a streaming JSON parser like `partial-json` / `parse-json-stream`.
-  2. Token limit too low. The "Add 5 more questions" payload likely needs ~2-3 KB of JSON; if `max_tokens` on the quiz model is 1024 or similar, the response is just being truncated. Bump it (and add a guard: if the response doesn't end with `]}` or `}` (depending on shape), re-prompt with `continue from where you left off`).
-  3. Quiz prompt may not say "respond with valid JSON only, no preamble". If the model wrote any prose before the JSON, the brace-finder / parser would fail.
-  4. **Code locations to inspect:** `src/app/api/quiz/route.ts`, the quiz tab component (likely under `src/components/SolverView.tsx` or a sibling `QuizPanel.tsx`), and the `/api/quiz` system prompt in `src/lib/prompts.ts`. Reproduce by clicking the "Review with a quick quiz / flashcard" → "Mixed" → "Add 5 more questions" path on any solved problem.
-  Linked to but distinct from the existing "Quiz + Follow-up questions panels non-functional" item below — that one is "chips don't fire requests at all"; this is "chip fires request but response is unparseable". Fixing #1 above probably fixes both since the panel is wired to the same endpoint.
+- [x] **🚨 Quiz JSON parse failure ("Could not parse quiz JSON. Got: …").** _Reported 2026-05-02, fixed same day in PR #41 (Tier A #4)._ Root cause confirmed as **token-cap truncation** — the model hit `maxOutputTokens=1200` mid-string while serializing 5 questions × (question + 4 choices + answer). Fix in `src/app/api/quiz/route.ts`: (1) bumped `maxOutputTokens` 1200 → 2400 to give 5–8 questions × full payload (now including the new `explanation` + `hint` fields) headroom, (2) added a `recoverTruncatedQuizItems()` salvager — when JSON.parse fails, we walk the raw text with a brace-depth state machine, JSON-parse each completed `{...}` item independently, and drop any tail item that's still mid-serialization. The user gets the N complete questions instead of an opaque error, which is strictly better UX and a defence against any future provider that tail-truncates differently. Verified locally against the user's failing payload (3 complete items recovered).
 
 - [ ] **🚨 Quiz + Follow-up questions panels non-functional in AI Solver.** _Reported 2026-04-30 by user (session 31e08430bdfc4ab297d11563b7ab29d7); not yet fixed._ After a solver response streams, the right-hand panel shows "Follow-up questions" / "Quiz" tabs with suggestion chips (`Make it easy`, `List key concepts`, `Give similar practice`, `Explain in English`) and an "Ask about this problem" input, but clicking the chips or typing into the input produces no response. Same for the Quiz tab. Likely root cause: the panel is wired to a `/api/chat` or `/api/quiz` endpoint that either doesn't exist yet or is not receiving the solver context (problem text + solution) correctly, OR the panel is a static stub that was never wired to the stream. **To investigate:** inspect `src/components/SolverView.tsx` (or wherever "Follow-up questions" / "Quiz" is rendered), trace the click handler on the chip buttons, check the network tab for the request it makes, and wire it to the existing orchestrator with `mode: "chat"` + the solver response as conversation context. Quiz should call `/api/quiz` (already exists per the autogen note) with the problem text as the seed.
 
@@ -187,6 +178,15 @@ After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="crea
 - **PR #19 (PDF export, merged):** print backstop finding — captured as the second Critical bug above.
 
 ## Changelog (append-only — every session adds an entry)
+
+- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — fix + feature: Quiz JSON parse + paginated panel with explanations and hints (Tier A #4):** _PR #41._
+  - **What:** closes both the Critical bug "Could not parse quiz JSON. Got: …" and the long-standing "Quiz panel UX is bare" gap from the audit. Quiz Section now renders one question at a time with a pager (`1 / N` + ‹/›), MCQ choices show inline green ✓ / red ✗ marks on submit, `explanation` auto-reveals after a pick, and a per-item `Hint` button gives a non-spoiler nudge.
+  - **API (`src/app/api/quiz/route.ts`):** bumped `maxOutputTokens` 1200 → 2400 (root cause of the truncation was the cap, not the model). Added `recoverTruncatedQuizItems()` — a brace-depth state machine that salvages every completed `{...}` item from a tail-truncated JSON payload and JSON.parses each one in isolation. Updated the system prompt to require `explanation` (≤25 words, plain text) and `hint` (≤15 words, no spoiler) per item, with rules pinned for both MCQ and short-answer.
+  - **Type (`src/types/education.ts`):** extended `PracticeItem` with optional `explanation` + `hint` fields (additive — old quiz data without these still renders fine).
+  - **UI (`src/components/SolverView.tsx`):** new `QuizSection` paginated wrapper (re-mounts the inner `QuizItem` on index change so paging back gives a clean attempt). `QuizItem` now (a) draws a `CheckCircle2` / `XCircle` mark inline at the right of the chosen + correct option after submit, (b) auto-shows an Explanation block when the model supplied one, (c) renders a `QuizHintRow` (lucide `Lightbulb` pill) above the question pre-submit; the row hides itself once the user submits to avoid competing with the green/red feedback. Old "Quick quiz" inline list section now delegates to `QuizSection`; the inline `<ol>` of all questions is gone.
+  - **CSS (`src/app/globals.css`):** new `.quiz-section-head` + `.quiz-pager` + `.quiz-pager-btn` + `.quiz-pager-count` (rounded pill with ‹/› arrows + tabular numerals for the counter), `.quiz-choice-mark{,-correct,-wrong}` (inline ✓/✗ marks pushed to the right edge with `margin-left:auto`), `.quiz-hint-row` + `.quiz-hint-btn{,.is-open}` + `.quiz-hint-text` (lightbulb pill that flips to accent colour when open), `.quiz-explanation` + `.quiz-explanation-label` (subdued elevated card with a small uppercase label).
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean (Next.js 16.2.4 / Turbopack).
+  - **Tier A status:** with PR #41 merged, the only remaining Tier A item is **#3 (inline orange glossary terms)** — biggest in the tier, intentionally last.
 
 - **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: Follow-up chips icons + verbose pre-canned prompts + Copy button (Tier A #5):** _PR #40._
   - **What:** the four follow-up chips on the Solver right-rail were already wired to `/api/chat`, but they (a) had no icons, (b) sent the chip label literally as the user message (which is too short to be useful out of context), and (c) had no Copy affordance on the AI reply. Closes the last "polish" gap on Follow-up chips.
@@ -388,9 +388,15 @@ Effort scale: XS = <½ day · S = ½–1 day · M = 1–2 days · L = 2–5 days
    (`return only an array of {term, definition}`); wrap matches in `<dfn>` with
    class `glossary-term`; on click, show a small floating tooltip. Apply in
    Solver, Chat artifact, PDF Notes, Cheatsheet.
-4. **Functional Quiz panel** *(S)* — Already partially wired (`POST /api/quiz`).
-   Match upstream UX: pagination `1/3` with `<` `>`, MCQ with green ✓ / red ✗
-   on click, auto-show Explanation block, Hint button per question.
+4. ~~**Functional Quiz panel** *(S)*~~ — **DONE (2026-05-02, PR #41)**.
+   Quiz JSON parse failure (Critical bug above) fixed by 2× `maxOutputTokens`
+   bump + truncation-tolerant `recoverTruncatedQuizItems()` salvager. UX
+   upgraded to match gpai.app: pager header (`1 / N` with ‹/›) renders one
+   question at a time; MCQ choices show inline green ✓ / red ✗ marks on
+   submit; per-item `explanation` field auto-shows after MCQ submit;
+   per-item `hint` button (`Lightbulb` pill) reveals a one-line nudge
+   without spoiling the answer. Re-mounting on page change resets local
+   state (selected option / hint open) for a clean re-attempt.
 5. ~~**Functional Follow-up chips** *(S)*~~ — **DONE (2026-05-02, PR #40)**.
    The chips were already wired to `/api/chat` with primer context, but
    matched gpai.app only superficially. PR #40 closes the remaining UX
@@ -651,9 +657,7 @@ gap closes cleanly.
 - ✅ **PR 1: Auto-titled tasks** (Tier A #1, XS) — **MERGED in PR #36**.
 - ✅ **PR 2: CrossCheckBadge avatar polish** (Tier A #2, S) — **MERGED in
   PR #38**.
-- **PR 3: Quiz panel functional** (Tier A #4, S) — Pagination, MCQ feedback
-  (green ✓ / red ✗ on click), auto-show Explanation, Hint button. The
-  `/api/quiz` endpoint and component already exist; this is UX polish.
+- ✅ **PR 3: Quiz panel functional** (Tier A #4, S) — **MERGED in PR #41**.
 - ✅ **PR 4: Follow-up chips functional** (Tier A #5, S) — **MERGED in
   PR #40**.
 - ✅ **PR 5: Try-demo carousel + Personalize tab** (Tier A #6 + #7, S) —
