@@ -94,14 +94,47 @@ export function ChatView({
     setAttachments([]);
     setStreamText("");
 
+    // Strip raw `dataUrl` (base64) bytes from every attachment that
+    // belongs to a previous turn. The server only re-analyzes the
+    // attachments on the *last* user message (`lastUser.attachments`
+    // in `src/app/api/chat/route.ts`); historical turns still need
+    // their `extractedText`, `name`, etc. so the model has context,
+    // but the multi-MB image dataUrls are pure body bloat there.
+    //
+    // Without this, a scanned-PDF upload that rasterizes to ~3 MB of
+    // page JPEGs is duplicated into every subsequent chat turn —
+    // first turn = 3 MB, second turn = 6 MB (>Vercel 4.5 MB cap),
+    // every turn after that fails with FUNCTION_PAYLOAD_TOO_LARGE
+    // until the user starts a new chat. Keeping bytes only on the
+    // freshly-submitted message keeps the body bounded.
+    const lastUserIdx = next.reduce(
+      (acc, m, i) => (m.role === "user" ? i : acc),
+      -1,
+    );
+    const wireMessages = next.map((m, i) => {
+      const baseContent =
+        m.role === "assistant" ? extractSources(m.content).content : m.content;
+      if (!m.attachments || m.attachments.length === 0) {
+        return { role: m.role, content: baseContent };
+      }
+      const isLastUser = i === lastUserIdx;
+      const stripped = m.attachments.map((a) =>
+        isLastUser
+          ? a
+          : {
+              name: a.name,
+              type: a.type,
+              size: a.size,
+              extractedText: a.extractedText,
+            },
+      );
+      return { role: m.role, content: baseContent, attachments: stripped };
+    });
+
     stream.start(
       "/api/chat",
       {
-        messages: next.map((m) => ({
-          role: m.role,
-          content: m.role === "assistant" ? extractSources(m.content).content : m.content,
-          attachments: m.attachments,
-        })),
+        messages: wireMessages,
         modelChoice,
         deepExplain,
         webEnabled,

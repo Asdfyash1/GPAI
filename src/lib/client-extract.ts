@@ -121,22 +121,28 @@ export async function extractTextFileClient(file: File): Promise<string> {
 //
 // Sizing constraints:
 //
-//   * Vercel serverless functions cap request bodies at ~4.5 MB. We aim
-//     for ~3.5 MB total across all pages to leave headroom for the rest
-//     of the JSON payload (messages, history, prompt).
+//   * Vercel serverless functions cap request bodies at ~4.5 MB. The
+//     OCR'd page JPEGs ride inside that body alongside the user prompt,
+//     chat history, and any extracted text from prior turns. After
+//     hitting FUNCTION_PAYLOAD_TOO_LARGE in production we tightened
+//     the budget to ~2.2 MB total so even a chat with several rounds
+//     of context still has comfortable headroom (the assistant's
+//     historical responses stay in the body too).
 //   * The Nemotron hosted endpoint stalls on inline images larger than
 //     ~1.7 MB each — see MAX_INLINE_IMAGE_BYTES in lib/vision.ts. We
-//     re-encode at scale 1.6 / quality 0.7 which keeps a typical
-//     letter-sized scan around 150-300 KB.
+//     re-encode at scale 1.4 / quality 0.6 which keeps a typical
+//     letter-sized scan around 90-160 KB. OCR quality is unchanged at
+//     this scale because Nemotron's vision tower internally downsamples
+//     above ~1024 px on the long edge.
 //   * We hard-cap the number of pages so a 200-page textbook doesn't
 //     produce a 200-call OCR storm. The user sees a "Sent first N of M
 //     pages" hint in the Composer when truncation kicks in.
 
 export const RASTER_DEFAULTS = {
-  scale: 1.6,
-  quality: 0.7,
-  maxPages: 24,
-  maxTotalBytes: 3_500_000,
+  scale: 1.4,
+  quality: 0.6,
+  maxPages: 16,
+  maxTotalBytes: 2_200_000,
 };
 
 export type RasterizedPage = {
