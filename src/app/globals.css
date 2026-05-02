@@ -2991,6 +2991,100 @@ a {
   .settings-nav-description {
     display: none;
   }
+
+  /* ── Phone readability bump.
+   *
+   * Default desktop type is sized for a 1440 wide viewport at ~26 in viewing
+   * distance. Phones are held closer (~14 in) but the diagonal is much
+   * smaller, and 13–14.5 px copy at that distance reads as "fine print" —
+   * users were squinting at chat replies and the solver solution. This
+   * block bumps content text to the 15–16 px range (the iOS 16 px floor
+   * is what stops Safari auto-zooming form inputs anyway, so we use 16 px
+   * for tappable text and 15.5 px for prose). Touch-target paddings stay
+   * unchanged where they were already comfortable; only text sizes grow.
+   *
+   * Touch targets that are still tight: chips and recent-items get a
+   * couple of extra px of vertical padding so the bigger text still has
+   * comfortable bleed inside the bubble.
+   */
+  .recent-item {
+    font-size: 14px;
+    padding: 9px 12px;
+  }
+  .chip {
+    font-size: 13.5px;
+    padding: 8px 13px;
+  }
+  .send-button {
+    width: 36px;
+    height: 36px;
+  }
+  .chat-bubble {
+    font-size: 15.5px;
+    line-height: 1.6;
+    padding: 12px 14px;
+  }
+  .assistant-content {
+    font-size: 15.5px;
+    line-height: 1.65;
+  }
+  .problem-card,
+  .answer-card,
+  .solution-card {
+    font-size: 15.5px;
+    line-height: 1.65;
+    padding: 14px 14px;
+  }
+  .section-heading {
+    font-size: 18px;
+  }
+  .hero-subtitle {
+    font-size: 15px;
+  }
+  /* KaTeX inline + display equations grow proportionally with surrounding
+   * text. The library's own default of 1.21 em is too large at the new
+   * 15.5 px base — 1.05 em keeps the equation's x-height aligned with the
+   * surrounding text without overflowing inline. */
+  .math-markdown .katex {
+    font-size: 1.05em;
+  }
+  /* Quiz: the question and the four choices were the most-complained-about
+   * cramped spots on phone. */
+  .quiz-question {
+    font-size: 15.5px;
+    line-height: 1.55;
+  }
+  .quiz-choice-text {
+    font-size: 15.5px;
+    line-height: 1.5;
+  }
+  .quiz-choice-letter {
+    flex: 0 0 26px;
+    height: 26px;
+    font-size: 14px;
+  }
+  /* Composer textarea is already pinned to 16 px (above) for iOS auto-zoom
+   * defence. Bump line-height so multi-line input wraps comfortably. */
+  .composer-textarea {
+    line-height: 1.5;
+  }
+  /* Cheatsheet / Document / PDF Notes / Notebook prose pages: the
+   * 14.5 px desktop default felt cramped at 375 / 414 widths. */
+  .cheatsheet-page,
+  .document-page {
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  /* Settings help-text was 12.5 px which reads tiny on phone. The 16 px
+   * iOS pin on `.settings-input` / `.settings-textarea` is already in
+   * place for auto-zoom defence (above); this just lifts the supporting
+   * help copy. */
+  .settings-help {
+    font-size: 13.5px;
+  }
+  .settings-nav-label {
+    font-size: 14px;
+  }
 }
 
 @media (max-width: 420px) {
