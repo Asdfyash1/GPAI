@@ -6,7 +6,10 @@ import type { ModelChoice, UploadedAsset } from "@/types/education";
 import { Composer } from "@/components/Composer";
 import { MathMarkdown } from "@/components/MathMarkdown";
 import { useStream } from "@/hooks/useStream";
-import { extractPdfTextClient } from "@/lib/client-extract";
+import {
+  extractPdfTextClient,
+  rasterizePdfToImagesClient,
+} from "@/lib/client-extract";
 
 type PdfNotesViewProps = {
   modelChoice: ModelChoice;
@@ -59,22 +62,55 @@ export function PdfNotesView({ modelChoice, setModelChoice }: PdfNotesViewProps)
     setParseError(null);
     setPdfText("");
     setPdfMeta(null);
+    setAttachments([]);
     try {
       // Parse the PDF entirely in the browser. Going through a serverless
       // endpoint would cap us at Vercel's 4.5 MB request body limit; this
       // path scales to anything the user can open in the browser.
       const { text, pages, characters } = await extractPdfTextClient(file);
-      if (!text) {
+      if (text) {
+        setPdfText(text);
+        setPdfMeta({
+          filename: file.name || "document.pdf",
+          pages,
+          characters,
+        });
+        return;
+      }
+
+      // Scanned PDF (no text layer): rasterize each page to a JPEG and
+      // hand them off as image attachments so the existing Nemotron
+      // vision pipeline OCRs them server-side.
+      const rendered = await rasterizePdfToImagesClient(file);
+      if (rendered.pages.length === 0) {
         throw new Error(
-          "PDF contained no extractable text — likely a scanned image. Re-upload as PNG / JPG screenshots so vision OCR can run.",
+          "Couldn't render the PDF for OCR — try uploading a screenshot of the page you care about instead.",
         );
       }
-      setPdfText(text);
+      const imageAttachments: UploadedAsset[] = rendered.pages.map(
+        ({ pageNumber, dataUrl }) => ({
+          name: `${file.name || "document.pdf"} — page ${pageNumber}/${rendered.totalPages}`,
+          type: "image/jpeg",
+          size: dataUrl.length,
+          dataUrl,
+          preview: dataUrl,
+        }),
+      );
+      setAttachments(imageAttachments);
       setPdfMeta({
         filename: file.name || "document.pdf",
-        pages,
-        characters,
+        pages: rendered.totalPages,
+        characters: 0,
       });
+      if (rendered.truncated) {
+        setParseError(
+          `Scanned PDF — only the first ${rendered.pages.length} of ${rendered.totalPages} pages were sent for OCR (Vercel request-body limit). Crop to the section you care about for later pages.`,
+        );
+      } else {
+        setParseError(
+          `Scanned PDF — running OCR on all ${rendered.pages.length} pages. This may take ~10-30 seconds when you generate.`,
+        );
+      }
     } catch (e) {
       setParseError(e instanceof Error ? e.message : "Failed to parse PDF");
     } finally {
@@ -84,10 +120,14 @@ export function PdfNotesView({ modelChoice, setModelChoice }: PdfNotesViewProps)
 
   const generate = (override?: string) => {
     const userInstruction = (override ?? prompt).trim();
-    if (!pdfText && !userInstruction) return;
+    const hasImageAttachments = attachments.some((a) =>
+      a.type.startsWith("image/"),
+    );
+    if (!pdfText && !userInstruction && !hasImageAttachments) return;
     const composed = pdfText
       ? `${userInstruction || "Generate structured study notes from this PDF."}\n\n--- PDF CONTENT ---\n${pdfText}`
-      : userInstruction;
+      : userInstruction ||
+        "Generate structured study notes from the attached PDF page images.";
     setDocTitle(
       pdfMeta?.filename
         ? `Notes: ${pdfMeta.filename}`
@@ -230,6 +270,8 @@ export function PdfNotesView({ modelChoice, setModelChoice }: PdfNotesViewProps)
                   setPdfText("");
                   setPdfMeta(null);
                   setPrompt("");
+                  setAttachments([]);
+                  setParseError(null);
                 }}
               >
                 New

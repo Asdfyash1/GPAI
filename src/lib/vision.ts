@@ -321,83 +321,124 @@ function isPdfAsset(asset: UploadedAsset): boolean {
 }
 
 /**
+ * Run a list of async tasks with a bounded concurrency window. Used so a
+ * scanned 24-page PDF doesn't fire 24 sequential Nemotron calls (would
+ * blow past the 60-second `maxDuration`) but also doesn't fire all 24 in
+ * parallel (would risk per-key rate-limit errors from NVIDIA NIM).
+ *
+ * Resolves with results in the same order as `items`.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      results[i] = await worker(items[i], i);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+const VISION_MAX_CONCURRENCY = 6;
+
+/**
  * Backwards-compatible entry point. For each attachment:
  *   - images go through the single Nemotron Omni vision call
  *   - PDFs are text-extracted via unpdf (scanned PDFs are rejected with a
  *     clear "re-upload as image" message — the Nemotron call only accepts
  *     image_url content, not raw PDF bytes)
  *   - text-like files (txt / md / csv / json / source code) are UTF-8 decoded
+ *
+ * Image OCR runs in parallel with concurrency = VISION_MAX_CONCURRENCY so
+ * scanned-PDF uploads (which now arrive as N image attachments) finish
+ * within the route's 60-second budget.
  */
 export async function analyzeUploadedImages(attachments: UploadedAsset[]) {
-  const analyzed: UploadedAsset[] = [];
+  console.log(
+    `[vision] analyzeUploadedImages: ${attachments.length} attachment(s)`,
+  );
 
-  console.log(`[vision] analyzeUploadedImages: ${attachments.length} attachment(s)`);
-  for (const asset of attachments) {
-    if (asset.type.startsWith("image/") && asset.dataUrl) {
-      try {
-        const extractedText = await describeImage(asset);
-        console.log(
-          `[vision] final extractedText for "${asset.name}" (${extractedText.length} chars): ${extractedText.slice(0, 300).replace(/\n/g, " ")}`,
-        );
-        analyzed.push({ ...asset, extractedText, dataUrl: undefined });
-      } catch (error) {
-        console.error(`[vision] Failed to analyze ${asset.name}:`, error);
-        analyzed.push({
-          ...asset,
-          extractedText: failureText(
-            `image analysis crashed for "${asset.name}": ${error instanceof Error ? error.message : "unknown error"}`,
-          ),
-          dataUrl: undefined,
-        });
+  return mapWithConcurrency(
+    attachments,
+    VISION_MAX_CONCURRENCY,
+    async (asset): Promise<UploadedAsset> => {
+      if (asset.type.startsWith("image/") && asset.dataUrl) {
+        try {
+          const extractedText = await describeImage(asset);
+          console.log(
+            `[vision] final extractedText for "${asset.name}" (${extractedText.length} chars): ${extractedText
+              .slice(0, 300)
+              .replace(/\n/g, " ")}`,
+          );
+          return { ...asset, extractedText, dataUrl: undefined };
+        } catch (error) {
+          console.error(`[vision] Failed to analyze ${asset.name}:`, error);
+          return {
+            ...asset,
+            extractedText: failureText(
+              `image analysis crashed for "${asset.name}": ${
+                error instanceof Error ? error.message : "unknown error"
+              }`,
+            ),
+            dataUrl: undefined,
+          };
+        }
       }
-      continue;
-    }
 
-    if (isPdfAsset(asset) && asset.dataUrl) {
-      try {
-        const extractedText = await extractPdfText(asset);
-        analyzed.push({ ...asset, extractedText, dataUrl: undefined });
-      } catch (error) {
-        console.error(`[vision] Failed to parse PDF ${asset.name}:`, error);
-        analyzed.push({
-          ...asset,
-          extractedText: failureText(
-            `PDF parse failed for "${asset.name}": ${error instanceof Error ? error.message : "unknown error"}`,
-          ),
-          dataUrl: undefined,
-        });
+      if (isPdfAsset(asset) && asset.dataUrl) {
+        try {
+          const extractedText = await extractPdfText(asset);
+          return { ...asset, extractedText, dataUrl: undefined };
+        } catch (error) {
+          console.error(`[vision] Failed to parse PDF ${asset.name}:`, error);
+          return {
+            ...asset,
+            extractedText: failureText(
+              `PDF parse failed for "${asset.name}": ${
+                error instanceof Error ? error.message : "unknown error"
+              }`,
+            ),
+            dataUrl: undefined,
+          };
+        }
       }
-      continue;
-    }
 
-    if (isTextLikeAsset(asset) && asset.dataUrl) {
-      try {
-        const extractedText = extractTextFile(asset);
-        analyzed.push({ ...asset, extractedText, dataUrl: undefined });
-      } catch (error) {
-        analyzed.push({
-          ...asset,
-          extractedText: failureText(
-            `text decode failed for "${asset.name}": ${error instanceof Error ? error.message : "unknown error"}`,
-          ),
-          dataUrl: undefined,
-        });
+      if (isTextLikeAsset(asset) && asset.dataUrl) {
+        try {
+          const extractedText = extractTextFile(asset);
+          return { ...asset, extractedText, dataUrl: undefined };
+        } catch (error) {
+          return {
+            ...asset,
+            extractedText: failureText(
+              `text decode failed for "${asset.name}": ${
+                error instanceof Error ? error.message : "unknown error"
+              }`,
+            ),
+            dataUrl: undefined,
+          };
+        }
       }
-      continue;
-    }
 
-    analyzed.push({
-      ...asset,
-      extractedText:
-        asset.extractedText ??
-        failureText(
-          `file "${asset.name}" of type "${asset.type || "unknown"}" cannot be read server-side — please paste the relevant excerpt or convert to PDF / text`,
-        ),
-      dataUrl: undefined,
-    });
-  }
-
-  return analyzed;
+      return {
+        ...asset,
+        extractedText:
+          asset.extractedText ??
+          failureText(
+            `file "${asset.name}" of type "${asset.type || "unknown"}" cannot be read server-side — please paste the relevant excerpt or convert to PDF / text`,
+          ),
+        dataUrl: undefined,
+      };
+    },
+  );
 }
 
 export function attachmentIsUnreadable(text: string | undefined): boolean {

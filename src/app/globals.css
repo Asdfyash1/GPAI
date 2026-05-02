@@ -2705,11 +2705,17 @@ a {
   .cheatsheet-main {
     height: auto;
   }
-  /* Mode tabs on tablets: never wrap; let the user swipe. */
+  /* Mode tabs on tablets: never wrap; let the user swipe. The
+   * `min-width: 0` + `flex-shrink: 1` combo is what actually allows the
+   * inline-flex strip to become smaller than its intrinsic content
+   * width — without it `overflow-x: auto` would have nothing to clip
+   * against and the strip would just push the topbar off-screen. */
   .mode-tabs {
     overflow-x: auto;
     flex-wrap: nowrap;
     scrollbar-width: none;
+    min-width: 0;
+    flex: 0 1 auto;
   }
   .mode-tabs::-webkit-scrollbar {
     display: none;
@@ -2927,6 +2933,64 @@ a {
     min-width: min(280px, calc(100vw - 16px));
     max-width: calc(100vw - 16px);
   }
+
+  /* ── Body scroll lock while the off-canvas drawer is open. Without
+   * this iOS Safari lets the page underneath scroll under the user's
+   * finger when they try to scroll the drawer — feels broken. The
+   * `position: fixed; width: 100%` combo is the iOS-safe variant: a
+   * plain `overflow: hidden` doesn't work in Safari. */
+  body[data-mobile-drawer="open"] {
+    overflow: hidden;
+  }
+
+  /* ── iOS safe-area: keep the composer / sticky chips above the home
+   * bar. Apply via padding so background colour still extends to the
+   * edge of the viewport. */
+  .workspace-body {
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+  .composer {
+    /* Stack a small breathing-room above whatever device chrome the
+     * browser is reporting. Most phones report 0 in landscape. */
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* ── Suppress the iOS double-tap-to-zoom delay on interactive
+   * controls. Chips, tabs, send button — every spot a user is likely
+   * to tap rapidly. */
+  .mode-tab,
+  .mode-more-item,
+  .icon-button,
+  .chip,
+  .send-button,
+  .quiz-choice-button,
+  .sidebar-mode-row,
+  .recent-item {
+    touch-action: manipulation;
+  }
+
+  /* ── Settings nav becomes a horizontal tab strip on phone (instead
+   * of the desktop sidebar list) so the General / Personalize content
+   * isn't pushed below the fold. */
+  .settings-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 8px;
+    gap: 6px;
+  }
+  .settings-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .settings-nav-item {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .settings-nav-description {
+    display: none;
+  }
 }
 
 @media (max-width: 420px) {
@@ -2934,7 +2998,12 @@ a {
     padding: 10px 10px 4px;
   }
   .workspace-body {
-    padding: 0 10px 20px;
+    /* Use longhands so the bottom keeps the safe-area inset added at
+     * the 720px breakpoint above. */
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 0;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
   }
   .hero-title {
     font-size: 24px;

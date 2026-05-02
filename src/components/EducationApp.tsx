@@ -121,6 +121,24 @@ export function EducationApp() {
     });
   }, []);
 
+  // Lock background scroll while the off-canvas drawer is open so the
+  // page underneath doesn't scroll under the user's finger when they
+  // try to scroll the drawer itself. Mirrors the modal-overlay
+  // behaviour native iOS / Android sheet presentations have. Only
+  // matters on phones — the drawer is desktop-hidden via CSS, but the
+  // body class is harmless there.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (mobileSidebarOpen) {
+      document.body.dataset.mobileDrawer = "open";
+    } else {
+      delete document.body.dataset.mobileDrawer;
+    }
+    return () => {
+      delete document.body.dataset.mobileDrawer;
+    };
+  }, [mobileSidebarOpen]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     document.documentElement.dataset.theme = theme;
