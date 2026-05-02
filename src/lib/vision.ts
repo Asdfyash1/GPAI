@@ -406,6 +406,14 @@ async function describeImage(asset: UploadedAsset): Promise<string> {
     );
   }
 
+  const hasGeminiKey = !!geminiApiKey();
+  const hasNvidiaKey = !!nvidiaVisionApiKey();
+  console.log(
+    `[vision] describeImage called — geminiKey=${hasGeminiKey}, nvidiaKey=${hasNvidiaKey}, ` +
+    `order=${hasGeminiKey ? "gemini→nvidia→tesseract" : "nvidia→gemini→tesseract"}, ` +
+    `imageType=${asset.type}, dataUrlLen=${asset.dataUrl.length}`,
+  );
+
   const errors: string[] = [];
 
   // Provider ordering: Gemini 2.0 Flash is dramatically more accurate on
@@ -428,7 +436,9 @@ async function describeImage(asset: UploadedAsset): Promise<string> {
         () => tryTesseract(asset),
       ];
 
-  for (const run of providers) {
+  for (let idx = 0; idx < providers.length; idx++) {
+    const run = providers[idx];
+    console.log(`[vision] attempting provider ${idx + 1}/${providers.length}`);
     let result: ProviderResult | null;
     try {
       result = await run();
@@ -439,13 +449,18 @@ async function describeImage(asset: UploadedAsset): Promise<string> {
         provider: "unknown",
       };
     }
-    if (!result) continue; // provider not configured, try next
+    if (!result) {
+      console.log(`[vision] provider ${idx + 1} skipped (not configured)`);
+      continue;
+    }
     if (result.ok) {
-      logDebug(`accepted ${result.provider} (${result.text.length} chars)`);
+      console.log(
+        `[vision] accepted ${result.provider} (${result.text.length} chars): ${result.text.slice(0, 200).replace(/\n/g, " ")}…`,
+      );
       return result.text;
     }
     errors.push(`${result.provider}: ${result.error}`);
-    logDebug(`rejected ${result.provider}: ${result.error}`);
+    console.log(`[vision] rejected ${result.provider}: ${result.error}`);
   }
 
   return failureText(
@@ -539,10 +554,14 @@ function isPdfAsset(asset: UploadedAsset): boolean {
 export async function analyzeUploadedImages(attachments: UploadedAsset[]) {
   const analyzed: UploadedAsset[] = [];
 
+  console.log(`[vision] analyzeUploadedImages: ${attachments.length} attachment(s)`);
   for (const asset of attachments) {
     if (asset.type.startsWith("image/") && asset.dataUrl) {
       try {
         const extractedText = await describeImage(asset);
+        console.log(
+          `[vision] final extractedText for "${asset.name}" (${extractedText.length} chars): ${extractedText.slice(0, 300).replace(/\n/g, " ")}`,
+        );
         analyzed.push({ ...asset, extractedText, dataUrl: undefined });
       } catch (error) {
         console.error(`[vision] Failed to analyze ${asset.name}:`, error);
