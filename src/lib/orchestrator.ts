@@ -229,7 +229,16 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
     }
   }
 
-  return parseModelResponse(finalDraft, request, verification);
+  // Best-effort: ask a small LLM for a 2-5 word semantic sidebar title.
+  // Skip for chat (chat sessions title themselves from the first user message).
+  let titleOverride: string | null = null;
+  if (request.mode !== "chat") {
+    titleOverride = await generateTaskTitle(request, finalDraft);
+  }
+
+  return parseModelResponse(finalDraft, request, verification, {
+    titleOverride,
+  });
 }
 
 export type StreamingHandle = {
@@ -283,6 +292,73 @@ export async function streamEducationalSolverDraft(
  * This is intentionally cheap (one extra solve + one one-token judge call)
  * and runs after the user has already received the primary streamed answer.
  */
+/**
+ * Ask a small LLM to summarise a STEM problem into a 2-5 word semantic title
+ * (mirrors gpai.app's auto-titled tasks in the sidebar — e.g. "Solving 4th-order
+ * ODE", "Quadratic factoring", "Cell-membrane diffusion"). Falls back to null
+ * on any failure so callers can keep their existing heuristic title.
+ */
+export async function generateTaskTitle(
+  request: EducationRequest,
+  primaryAnswerText: string,
+): Promise<string | null> {
+  const providers = configuredProviders();
+  const primary = providers[0];
+  if (!primary) return null;
+
+  // Use a fast, cheap title-only model. Defaults to the primary solver model
+  // because it's already loaded; an env var lets us swap in a smaller model.
+  const titleModel =
+    process.env.NVIDIA_TITLE_MODEL ?? primary.solverModel;
+
+  const promptSnippet = request.prompt.trim().slice(0, 600);
+  const answerSnippet = primaryAnswerText.trim().slice(0, 400);
+
+  const system =
+    "You write ultra-short, descriptive titles (2-5 words) summarising STEM problems for a sidebar list. Return the title only — no quotes, no punctuation, no markdown, no trailing period. Examples: \"Solving 4th-order ODE\", \"Quadratic factoring\", \"Projectile motion problem\", \"Pythagorean theorem proof\".";
+  const userPrompt =
+    `Problem prompt:\n${promptSnippet}` +
+    (answerSnippet ? `\n\nFirst part of answer:\n${answerSnippet}` : "") +
+    "\n\nTitle (2-5 words, no quotes):";
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const result = await generateText({
+      model: buildLanguageModel(primary, titleModel),
+      system,
+      prompt: userPrompt,
+      temperature: 0.2,
+      maxOutputTokens: 24,
+      abortSignal: controller.signal,
+    });
+    const raw = result.text ?? "";
+    return cleanTitle(raw);
+  } catch (error) {
+    console.warn("[orchestrator] title generation failed:", error);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function cleanTitle(raw: string): string | null {
+  const firstLine = raw.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+  if (!firstLine) return null;
+  // Strip wrapping quotes/backticks and trailing punctuation.
+  const stripped = firstLine
+    .replace(/^["'`*_\s]+/, "")
+    .replace(/["'`*_\s]+$/, "")
+    .replace(/[.!?…]+$/, "")
+    .trim();
+  if (!stripped) return null;
+  // Reject obvious failure modes: too long, too short, or contains markdown.
+  if (stripped.length > 80) return null;
+  if (stripped.length < 2) return null;
+  if (/^[#>*]/.test(stripped)) return null;
+  return stripped;
+}
+
 export async function runCrossCheckOnAnswer(
   request: EducationRequest,
   primaryAnswerText: string,

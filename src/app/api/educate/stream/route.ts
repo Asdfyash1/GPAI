@@ -1,4 +1,5 @@
 import {
+  generateTaskTitle,
   runCrossCheckOnAnswer,
   streamEducationalSolverDraft,
 } from "@/lib/orchestrator";
@@ -93,24 +94,53 @@ export async function POST(request: Request) {
           verification,
         );
 
-        if (fullRequest.crossCheck && fullRequest.mode === "solver") {
-          try {
-            parsed.crossCheck = await runCrossCheckOnAnswer(
-              fullRequest,
-              parsed.answer || aggregated,
-            );
-            verification.push({
-              model: parsed.crossCheck.secondaryModel,
-              role: "critic",
-              status:
-                parsed.crossCheck.status === "skipped" ? "skipped" : "complete",
-              notes:
-                parsed.crossCheck.notes ??
-                `Cross-check verdict: ${parsed.crossCheck.status}.`,
-            });
-          } catch (error) {
-            console.error("[educate/stream] cross-check failed:", error);
-          }
+        // Run title generation and cross-check in parallel — both are best-
+        // effort post-stream calls and have nothing to do with each other.
+        const titlePromise =
+          fullRequest.mode === "chat"
+            ? Promise.resolve<string | null>(null)
+            : generateTaskTitle(
+                fullRequest,
+                parsed.answer || aggregated,
+              ).catch((error) => {
+                console.warn(
+                  "[educate/stream] title generation failed:",
+                  error,
+                );
+                return null;
+              });
+
+        const crossCheckPromise =
+          fullRequest.crossCheck && fullRequest.mode === "solver"
+            ? runCrossCheckOnAnswer(
+                fullRequest,
+                parsed.answer || aggregated,
+              ).catch((error) => {
+                console.error("[educate/stream] cross-check failed:", error);
+                return null;
+              })
+            : Promise.resolve(null);
+
+        const [autoTitle, crossCheckResult] = await Promise.all([
+          titlePromise,
+          crossCheckPromise,
+        ]);
+
+        if (autoTitle) {
+          parsed.title = autoTitle;
+        }
+
+        if (crossCheckResult) {
+          parsed.crossCheck = crossCheckResult;
+          verification.push({
+            model: crossCheckResult.secondaryModel,
+            role: "critic",
+            status:
+              crossCheckResult.status === "skipped" ? "skipped" : "complete",
+            notes:
+              crossCheckResult.notes ??
+              `Cross-check verdict: ${crossCheckResult.status}.`,
+          });
         }
 
         controller.enqueue(encoder.encode(STRUCTURED_TAIL_SENTINEL));
