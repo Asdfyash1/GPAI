@@ -2655,6 +2655,109 @@ a {
   background: rgba(255, 255, 255, 0.02);
 }
 
+/* ===========  GLOSSARY TERMS (Tier A #3) ============ */
+
+/*
+ * Inline glossary highlighting (Tier A #3 — gpai.app's orange clickable
+ * terms feature). The renderer wraps each term occurrence in a
+ * `<GlossaryTerm>` button with a tooltip-style popover. Visual rules:
+ *   - Keep the underline thin and the colour the existing accent so the
+ *     term reads as an inline link without looking like a normal
+ *     blue/external link.
+ *   - The popover is plain CSS (no Radix) — positioned absolutely
+ *     beneath the wrapper span. Width is capped so long definitions
+ *     don't blow out narrow gutters.
+ *   - On phones the popover gets pinned to the bottom of the viewport
+ *     so it stays in view even when triggered near the top of a long
+ *     paragraph.
+ */
+.glossary-term-wrapper {
+  position: relative;
+  display: inline;
+}
+
+.glossary-term {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+  cursor: help;
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+.glossary-term:hover,
+.glossary-term:focus-visible {
+  color: var(--accent-strong, var(--accent));
+  outline: none;
+  text-decoration-color: var(--accent-strong, var(--accent));
+}
+.glossary-term[aria-expanded="true"] {
+  background: rgba(249, 115, 22, 0.08);
+  border-radius: 3px;
+}
+
+.glossary-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: max-content;
+  max-width: min(320px, 80vw);
+  padding: 10px 12px;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-popover, 0 8px 24px rgba(0, 0, 0, 0.18));
+  font-size: 13px;
+  line-height: 1.55;
+  pointer-events: auto;
+  white-space: normal;
+  /* The wrapper is `display: inline`, which doesn't establish a
+   * positioned context. We rely on the nearest positioned ancestor
+   * (the prose card) for layout — the popover may overlap adjacent
+   * lines but since its z-index is above the surrounding text it
+   * looks like a tooltip rather than a layout shift. */
+}
+
+.glossary-popover-term {
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 13px;
+}
+.glossary-popover-def {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+.glossary-popover-ask {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.glossary-popover-ask:hover,
+.glossary-popover-ask:focus-visible {
+  background: var(--accent);
+  color: white;
+  outline: none;
+}
+
 /* ===========  RESPONSIVE ============ */
 
 /*
@@ -3084,6 +3187,28 @@ a {
   }
   .settings-nav-label {
     font-size: 14px;
+  }
+
+  /* ── Glossary popover: pin to the bottom of the viewport on phones
+   * so it always reads cleanly even when the term is near the bottom
+   * of a long paragraph or near the right edge of the card. */
+  .glossary-popover {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    top: auto;
+    width: auto;
+    max-width: none;
+    font-size: 14px;
+  }
+  .glossary-popover-term,
+  .glossary-popover-def {
+    font-size: 14px;
+  }
+  .glossary-popover-ask {
+    font-size: 13px;
+    padding: 6px 10px;
   }
 }
 

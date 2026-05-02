@@ -84,6 +84,20 @@ export type SolutionStep = {
   teachingNote?: string;
 };
 
+/**
+ * A single glossary entry surfaced by the Solver / Cheatsheet / Notebook.
+ * The model returns these as part of the response so the UI can light up
+ * occurrences of `term` in the rendered prose with a tooltip + click-to-
+ * ask-about-this-term affordance (Tier A #3 — gpai.app's orange
+ * underlined terms feature).
+ */
+export type GlossaryEntry = {
+  /** Short noun phrase as it appears in the prose, e.g. "linear ODE". */
+  term: string;
+  /** One-sentence definition, plain text (no markdown). */
+  definition: string;
+};
+
 export type PracticeItem = {
   question: string;
   answer: string;
@@ -123,6 +137,12 @@ export type EducationResponse = {
   visualPlan: string[];
   cheatsheetBlocks: SolutionStep[];
   followUps: string[];
+  /**
+   * Optional inline glossary for the current solution. When present the
+   * Solver lights up matching term occurrences in the rendered prose
+   * (orange underline, tooltip on hover, click → ask-about-this-term).
+   */
+  glossary?: GlossaryEntry[];
   confidence: number;
   verification: VerificationSignal[];
   crossCheck?: CrossCheckResult;
