@@ -9,6 +9,7 @@ import {
   Settings,
 } from "lucide-react";
 import type { FeatureMode } from "@/types/education";
+import { MODES } from "@/components/ModeTabs";
 
 export type SidebarItem = {
   id: string;
@@ -27,6 +28,18 @@ type SidebarProps = {
    * mode.
    */
   mobileOpen?: boolean;
+  /**
+   * Currently active feature mode. Used to highlight the corresponding
+   * row in the mobile-only feature list inside the drawer.
+   */
+  activeMode?: FeatureMode;
+  /**
+   * Switch the active feature mode (Solver, Visualizer, AI Chat, …).
+   * The drawer surfaces every mode so phone users still have a path to
+   * the long-tail features (Report, PDF Notes, Cheatsheet, Notebook)
+   * even if the topbar's overflow `More` menu is unreachable.
+   */
+  onModeChange?: (mode: FeatureMode) => void;
   items: SidebarItem[];
   activeItemId?: string;
   onSelect: (item: SidebarItem) => void;
@@ -40,6 +53,8 @@ export function Sidebar({
   collapsed,
   onToggle,
   mobileOpen = false,
+  activeMode,
+  onModeChange,
   items,
   activeItemId,
   onSelect,
@@ -84,6 +99,26 @@ export function Sidebar({
         <Plus size={14} />
         {!collapsed && <span>New task</span>}
       </button>
+
+      {!collapsed && onModeChange && (
+        <nav className="sidebar-modes" aria-label="Workspaces">
+          {MODES.map((m) => {
+            const Icon = m.icon;
+            const isActive = activeMode === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                className={`sidebar-mode-row ${isActive ? "is-active" : ""}`}
+                onClick={() => onModeChange(m.id)}
+              >
+                <Icon size={14} />
+                <span>{m.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
       {!collapsed && (
         <div className="recent-section">

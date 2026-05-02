@@ -278,6 +278,11 @@ export function EducationApp() {
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((p) => !p)}
         mobileOpen={mobileSidebarOpen}
+        activeMode={mode}
+        onModeChange={(next) => {
+          setMode(next);
+          handleNewTask();
+        }}
         items={history}
         activeItemId={activeItem}
         onSelect={handleSelectItem}

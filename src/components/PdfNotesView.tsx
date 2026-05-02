@@ -6,6 +6,7 @@ import type { ModelChoice, UploadedAsset } from "@/types/education";
 import { Composer } from "@/components/Composer";
 import { MathMarkdown } from "@/components/MathMarkdown";
 import { useStream } from "@/hooks/useStream";
+import { extractPdfTextClient } from "@/lib/client-extract";
 
 type PdfNotesViewProps = {
   modelChoice: ModelChoice;
@@ -59,24 +60,20 @@ export function PdfNotesView({ modelChoice, setModelChoice }: PdfNotesViewProps)
     setPdfText("");
     setPdfMeta(null);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch("/api/parse-pdf", {
-        method: "POST",
-        body: form,
-      });
-      const json = (await response.json()) as
-        | { error: string }
-        | { filename: string; pages: number; characters: number; text: string };
-      if (!response.ok || "error" in json) {
-        const msg = "error" in json ? json.error : `Failed (${response.status})`;
-        throw new Error(msg);
+      // Parse the PDF entirely in the browser. Going through a serverless
+      // endpoint would cap us at Vercel's 4.5 MB request body limit; this
+      // path scales to anything the user can open in the browser.
+      const { text, pages, characters } = await extractPdfTextClient(file);
+      if (!text) {
+        throw new Error(
+          "PDF contained no extractable text — likely a scanned image. Re-upload as PNG / JPG screenshots so vision OCR can run.",
+        );
       }
-      setPdfText(json.text);
+      setPdfText(text);
       setPdfMeta({
-        filename: json.filename,
-        pages: json.pages,
-        characters: json.characters,
+        filename: file.name || "document.pdf",
+        pages,
+        characters,
       });
     } catch (e) {
       setParseError(e instanceof Error ? e.message : "Failed to parse PDF");

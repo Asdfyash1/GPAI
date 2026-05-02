@@ -214,6 +214,39 @@ a {
   padding: 4px 2px;
 }
 
+/* Mobile-only feature list inside the drawer. Hidden on desktop —
+ * the topbar Mode tabs already cover this. Surfaces every mode so
+ * phone users have a fallback path to the long-tail features (Report,
+ * PDF Notes, Cheatsheet, Notebook) without depending on the topbar's
+ * overflow `More` dropdown. */
+.sidebar-modes {
+  display: none;
+}
+
+.sidebar-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+  width: 100%;
+  border: 0;
+}
+
+.sidebar-mode-row:hover {
+  background: var(--bg-elev);
+}
+
+.sidebar-mode-row.is-active {
+  background: var(--bg-elev-2);
+  color: var(--ink);
+  font-weight: 500;
+}
+
 .recent-header {
   display: flex;
   justify-content: space-between;
@@ -629,6 +662,22 @@ a {
 .attachment-remove {
   width: 18px;
   height: 18px;
+}
+
+.attachment-chip.is-parsing {
+  color: var(--ink-muted);
+  background: var(--bg-elev);
+  padding: 4px 10px;
+}
+
+.composer-pick-error {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(220, 60, 60, 0.08);
+  color: #d63b3b;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .composer-textarea {
@@ -2839,6 +2888,44 @@ a {
   .icon-button {
     min-width: 36px;
     min-height: 36px;
+  }
+
+  /* ── iOS Safari aggressively zooms inputs whose computed font-size
+   * is below 16px. Bump everything composer-adjacent to 16px on phone
+   * to keep the viewport stable when the user taps a field. */
+  .composer-textarea,
+  .settings-input,
+  .settings-textarea,
+  .cheatsheet-edit-composer input {
+    font-size: 16px;
+  }
+
+  /* ── Surface the per-mode shortcut list inside the drawer. The
+   * topbar's overflow `More` dropdown still works, but having every
+   * feature one tap deep from the drawer matches gpai.app's mobile
+   * shape and means the user is never stranded if they can't find the
+   * dropdown. */
+  .sidebar-modes {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 2px 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4px;
+  }
+
+  /* ── Mode-tab strip: keep horizontal scroll snappy on phones. */
+  .mode-tabs {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── More menu when shown on phone via the portal. Make it stretch
+   * almost edge-to-edge for a bigger tap target. The component sets
+   * `position: fixed` + computed coordinates inline; this just sizes
+   * the menu generously on narrow viewports. */
+  .mode-more-menu {
+    min-width: min(280px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
   }
 }
 
