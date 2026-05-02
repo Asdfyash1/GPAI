@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Moon, Sun } from "lucide-react";
+import { Menu, Moon, Sun } from "lucide-react";
 import type {
   ChatMessage,
   ChatSession,
@@ -32,6 +32,10 @@ export function EducationApp() {
   const [mode, setMode] = useState<FeatureMode>("solver");
   const [theme, setTheme] = useState<Theme>("dark");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Mobile (<= 720px) drawer state — separate from the desktop
+  // "collapsed-to-rail" state above. We default to closed so first
+  // paint doesn't flash a full-screen sidebar over the workspace.
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("auto");
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
@@ -212,11 +216,15 @@ export function EducationApp() {
     setVisualizerSeed("");
     activeChatIdRef.current = null;
     setActiveChatId(null);
+    // Close the mobile drawer once a navigation occurs — matches every
+    // other mobile-app drawer pattern (gpai.app, GitHub, Slack…).
+    setMobileSidebarOpen(false);
   };
 
   const handleSelectItem = (item: SidebarItem) => {
     setMode(item.mode);
     setActiveItem(item.id);
+    setMobileSidebarOpen(false);
     if (item.mode === "chat") {
       activeChatIdRef.current = item.id;
       setActiveChatId(item.id);
@@ -269,6 +277,7 @@ export function EducationApp() {
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((p) => !p)}
+        mobileOpen={mobileSidebarOpen}
         items={history}
         activeItemId={activeItem}
         onSelect={handleSelectItem}
@@ -277,6 +286,14 @@ export function EducationApp() {
         onOpenSettings={() => setSettingsOpen(true)}
         userLabel="hiyash04+asd1"
       />
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close sidebar"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -285,6 +302,15 @@ export function EducationApp() {
       />
       <main className="workspace">
         <header className="workspace-topbar">
+          <button
+            type="button"
+            className="workspace-menu-button"
+            aria-label="Open sidebar"
+            aria-expanded={mobileSidebarOpen}
+            onClick={() => setMobileSidebarOpen(true)}
+          >
+            <Menu size={18} />
+          </button>
           <ModeTabs active={mode} onChange={(m) => {
             setMode(m);
             handleNewTask();
