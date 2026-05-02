@@ -729,15 +729,33 @@ a {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 6px;
-  min-width: 180px;
+  min-width: 280px;
+  max-width: 340px;
   box-shadow: var(--shadow-popover);
 }
 
+.model-option-group + .model-option-group.has-divider {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.model-option-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 10px 2px;
+}
+
 .model-option {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   width: 100%;
   text-align: left;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border-radius: 8px;
   font-size: 13px;
   color: var(--ink);
@@ -746,6 +764,56 @@ a {
 .model-option:hover,
 .model-option.is-active {
   background: var(--bg-elev);
+}
+
+.model-option-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.model-option-label {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.model-option-description {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.model-option-crosscheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent);
+  margin-top: 2px;
+}
+
+.model-crosscheck-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(229, 110, 39, 0.10);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: help;
+}
+
+@media (max-width: 760px) {
+  .model-crosscheck-indicator {
+    /* Hide the verbose label on narrow viewports — the dropdown still shows it. */
+    display: none;
+  }
 }
 
 .send-button {

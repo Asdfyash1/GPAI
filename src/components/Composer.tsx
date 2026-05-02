@@ -19,13 +19,63 @@ import {
 } from "react";
 import type { ModelChoice, UploadedAsset } from "@/types/education";
 
-const modelOptions: Array<{ id: ModelChoice; label: string }> = [
-  { id: "auto", label: "Auto" },
-  { id: "mistral-large", label: "Mistral Large 3" },
-  { id: "nemotron", label: "Nemotron 49B" },
-  { id: "deepseek-flash", label: "DeepSeek V4 Flash" },
-  { id: "llama", label: "Llama 3.3 70B" },
-  { id: "demo", label: "Demo (offline)" },
+type ModelOption = {
+  id: ModelChoice;
+  label: string;
+  description: string;
+  /**
+   * When the model is the *primary* in a cross-check pair, this is the
+   * verifier model name shown as a "Cross-check with …" subhead in the
+   * dropdown — mirrors gpai.app's "Cross-check with [model icons]" badge
+   * under GPAI Pro.
+   */
+  crossCheckPartner?: string;
+  group: "primary" | "third-party" | "offline";
+};
+
+const modelOptions: ModelOption[] = [
+  {
+    id: "auto",
+    label: "Auto",
+    description:
+      "Smartest for detailed solutions — high accuracy, advanced visualisations.",
+    crossCheckPartner: "Nemotron 49B",
+    group: "primary",
+  },
+  {
+    id: "mistral-large",
+    label: "Mistral Large 3",
+    description: "Fast and efficient for most problems.",
+    crossCheckPartner: "Nemotron 49B",
+    group: "primary",
+  },
+  {
+    id: "nemotron",
+    label: "Nemotron 49B",
+    description: "Strong reasoner; high token cap.",
+    crossCheckPartner: "Llama 3.3 70B",
+    group: "primary",
+  },
+  {
+    id: "deepseek-flash",
+    label: "DeepSeek V4 Flash",
+    description: "Fast experimental model.",
+    crossCheckPartner: "Llama 3.3 70B",
+    group: "primary",
+  },
+  {
+    id: "llama",
+    label: "Llama 3.3 70B",
+    description: "Balanced default — good throughput.",
+    crossCheckPartner: "Nemotron 49B",
+    group: "primary",
+  },
+  {
+    id: "demo",
+    label: "Demo (offline)",
+    description: "Deterministic sample output, no API key required.",
+    group: "offline",
+  },
 ];
 
 type ComposerProps = {
@@ -63,6 +113,7 @@ export function Composer(props: ComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const currentModel = modelOptions.find((m) => m.id === props.modelChoice);
 
   const onPickFiles = useCallback(
     async (files: FileList | File[] | null) => {
@@ -226,6 +277,17 @@ export function Composer(props: ComposerProps) {
               <span>Cross-check</span>
             </label>
           )}
+          {props.showCrossCheck &&
+            props.crossCheck !== false &&
+            currentModel?.crossCheckPartner && (
+              <span
+                className="model-crosscheck-indicator"
+                title={`When you submit, ${currentModel.label} solves the problem and ${currentModel.crossCheckPartner} independently verifies the answer.`}
+              >
+                <Sparkles size={12} aria-hidden="true" />
+                Cross-check with {currentModel.crossCheckPartner}
+              </span>
+            )}
           <div className="model-select-wrap">
             <button
               type="button"
@@ -234,26 +296,73 @@ export function Composer(props: ComposerProps) {
               aria-haspopup="menu"
               aria-expanded={modelOpen}
             >
-              {modelOptions.find((m) => m.id === props.modelChoice)?.label ??
-                "Auto"}
+              {currentModel?.label ?? "Auto"}
             </button>
             {modelOpen && (
-              <div className="model-select-menu">
-                {modelOptions.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className={`model-option ${
-                      props.modelChoice === m.id ? "is-active" : ""
-                    }`}
-                    onClick={() => {
-                      props.onModelChange(m.id);
-                      setModelOpen(false);
-                    }}
-                  >
-                    {m.label}
-                  </button>
-                ))}
+              <div className="model-select-menu" role="menu">
+                {(["primary", "third-party", "offline"] as const).map(
+                  (group, groupIdx) => {
+                    const groupOptions = modelOptions.filter(
+                      (m) => m.group === group,
+                    );
+                    if (groupOptions.length === 0) return null;
+                    const groupLabel: Record<typeof group, string> = {
+                      primary: "Forge models",
+                      "third-party": "Third-party model",
+                      offline: "Offline",
+                    };
+                    return (
+                      <div
+                        key={group}
+                        className={`model-option-group${
+                          groupIdx > 0 ? " has-divider" : ""
+                        }`}
+                      >
+                        <div className="model-option-group-label">
+                          {groupLabel[group]}
+                        </div>
+                        {groupOptions.map((m) => {
+                          const isActive = props.modelChoice === m.id;
+                          const showCrossCheckSubhead =
+                            m.group === "primary" &&
+                            m.crossCheckPartner &&
+                            props.crossCheck !== false;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={isActive}
+                              className={`model-option ${
+                                isActive ? "is-active" : ""
+                              }`}
+                              onClick={() => {
+                                props.onModelChange(m.id);
+                                setModelOpen(false);
+                              }}
+                            >
+                              <span className="model-option-row">
+                                <span className="model-option-label">
+                                  {isActive ? "✓ " : ""}
+                                  {m.label}
+                                </span>
+                              </span>
+                              <span className="model-option-description">
+                                {m.description}
+                              </span>
+                              {showCrossCheckSubhead && (
+                                <span className="model-option-crosscheck">
+                                  <Sparkles size={11} aria-hidden="true" />
+                                  Cross-check with {m.crossCheckPartner}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  },
+                )}
               </div>
             )}
           </div>
