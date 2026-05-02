@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import type { ModelChoice, UploadedAsset } from "@/types/education";
+import { ModelAvatars } from "@/components/ModelAvatars";
 
 type ModelOption = {
   id: ModelChoice;
@@ -284,8 +285,14 @@ export function Composer(props: ComposerProps) {
                 className="model-crosscheck-indicator"
                 title={`When you submit, ${currentModel.label} solves the problem and ${currentModel.crossCheckPartner} independently verifies the answer.`}
               >
-                <Sparkles size={12} aria-hidden="true" />
-                Cross-check with {currentModel.crossCheckPartner}
+                <span className="model-crosscheck-indicator-label">
+                  Cross-check with
+                </span>
+                <ModelAvatars
+                  primary={currentModel.label}
+                  secondary={currentModel.crossCheckPartner}
+                  size={16}
+                />
               </span>
             )}
           <div className="model-select-wrap">
@@ -352,8 +359,12 @@ export function Composer(props: ComposerProps) {
                               </span>
                               {showCrossCheckSubhead && (
                                 <span className="model-option-crosscheck">
-                                  <Sparkles size={11} aria-hidden="true" />
-                                  Cross-check with {m.crossCheckPartner}
+                                  Cross-check with
+                                  <ModelAvatars
+                                    primary={m.label}
+                                    secondary={m.crossCheckPartner}
+                                    size={14}
+                                  />
                                 </span>
                               )}
                             </button>

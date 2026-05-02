@@ -188,7 +188,13 @@ After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="crea
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: cross-check indicator on model selector (Tier A #8):** _new PR._
+- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: CrossCheckBadge avatar polish + shared ModelAvatars (Tier A #2):** _new PR._
+  - **What:** the `CrossCheckBadge` had 5 states with text-only labels; gpai.app shows the same badge with two overlapping avatar circles whose colours/initials identify the verifier pair (e.g. Llama-blue `L` overlapping Nemotron-green `N`). The composer's `Cross-check with <verifier>` pill (added in PR #37) was also text-only.
+  - **How:** new `src/components/ModelAvatars.tsx` exporting `modelDisplay(model)` (returns `{initial, short, bg}` for 8 model families: Nemotron green, Mistral orange, DeepSeek blue, Llama Facebook-blue, Gemini Google-blue, OpenAI green, Demo grey, fallback slate) and `<ModelAvatars primary secondary size />` (overlapping circles with white border). `CrossCheckBadge` in `SolverView.tsx` now renders the avatar pair before the icon + label and tooltips name both models. Composer's pill and dropdown subheads now embed `<ModelAvatars size={14|16} />` after `Cross-check with`.
+  - **CSS:** added `.cross-checked-avatars`, `.cross-checked-avatar`, `.cross-checked-icon`, `.cross-checked-pulse` keyframes (pending state pulses softly), and `.model-crosscheck-indicator-label`. Adjusted padding on the badge to make room for the avatars (left padding `4px` when avatars present, `10px` for pending/skipped which have no avatars).
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean.
+
+- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: cross-check indicator on model selector (Tier A #8):** _PR #37, merged._
   - **What:** gpai.app shows a "Cross-check with [icons]" subhead under GPAI Pro in the model selector, indicating multi-model verification. Forge had no equivalent — users couldn't see *why* "Auto" was different from "Llama 3.3 70B" or whether cross-check was actually wired to the selected model.
   - **How:** `src/components/Composer.tsx` — extended `modelOptions` with `description`, `crossCheckPartner`, and `group` fields. Added two surface-level indicators: (1) an inline pill `✦ Cross-check with <verifier>` next to the model select button (renders only when `crossCheck` is on AND `currentModel.crossCheckPartner` is set; hidden < 760 px); (2) the dropdown menu now renders option descriptions, a `Cross-check with <verifier>` subhead per primary option, and is grouped into "Forge models / Third-party model / Offline" sections with a divider between groups. Active option prefixed with `✓` and `aria-checked="true"`.
   - **CSS:** added `.model-option-group`, `.model-option-group-label`, `.model-option-row`, `.model-option-label`, `.model-option-description`, `.model-option-crosscheck`, `.model-crosscheck-indicator` to `src/app/globals.css`. Dropdown widened from 180 px → 280 px min, 340 px max.
@@ -348,10 +354,16 @@ Effort scale: XS = <½ day · S = ½–1 day · M = 1–2 days · L = 2–5 days
    "Solving 4th-order ODE" instead of "(D⁴ − 2D³ + D²)y = x³". Skipped for
    `chat` mode (chats title themselves from first user message).
    Override via `NVIDIA_TITLE_MODEL` env var (defaults to primary solver model).
-2. **Cross-check `Cross-checked` badge polish** *(S)* — The CrossCheckBadge
-   component already exists. Match upstream visual: two avatar circles + green
-   `✓ Cross-checked` label + tooltip listing the model names. Today our badge
-   has 5 states but the avatar/tooltip detail is missing.
+2. ~~**Cross-check `Cross-checked` badge polish** *(S)*~~ —
+   **DONE** (2026-05-02). Extracted `modelDisplay()` and `<ModelAvatars />`
+   into a shared `src/components/ModelAvatars.tsx` so both `CrossCheckBadge`
+   (Solver result header) and Composer's inline `Cross-check with [icons]`
+   pill render the same overlapping-avatar pair. 8 model families have
+   deterministic colours + initials (Nemotron `N`, Mistral `M`, DeepSeek `D`,
+   Llama `L`, Gemini `G`, OpenAI `O`, Demo `•`, fallback first-alpha-char).
+   Improved tooltips now name both models (`Cross-checked by Llama + Nemotron:
+   both models reached the same conclusion.`). Pending state pulses softly
+   while the verifier is still running. Skipped state has clearer copy.
 3. **Inline orange clickable glossary terms** *(M)* — Site-wide pattern.
    Implementation: post-process the streamed markdown with an LLM glossary pass
    (`return only an array of {term, definition}`); wrap matches in `<dfn>` with
