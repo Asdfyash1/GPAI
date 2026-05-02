@@ -1,12 +1,12 @@
 /**
- * Backend test script for the multi-provider vision OCR chain.
+ * Backend test script for the single-provider Nemotron Omni vision pipeline.
  *
  * Usage:
  *   npx tsx scripts/test-vision.ts <path-to-image>
  *
  * Runs the same `analyzeUploadedImages()` that the API route uses, prints
- * the extracted text + which provider succeeded, and reports the failure
- * detail when no provider produces readable output.
+ * the extracted text, and surfaces the failure reason when the model emits
+ * the UNREADABLE sentinel.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -47,15 +47,13 @@ async function main() {
   console.log(
     `[test-vision] file=${asset.name} type=${asset.type} size=${(asset.size / 1024).toFixed(1)} KB`,
   );
+  const hasKey =
+    !!process.env.NVIDIA_VISION_API_KEY ||
+    !!process.env.NVIDIA_IMAGE_TO_TEXT_API_KEY ||
+    !!process.env.NVIDIA_API_KEY ||
+    !!process.env.NIM_API_KEY;
   console.log(
-    `[test-vision] providers configured:`,
-    [
-      process.env.NVIDIA_API_KEY || process.env.NIM_API_KEY ? "nvidia" : null,
-      process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY ? "gemini" : null,
-      "tesseract",
-    ]
-      .filter(Boolean)
-      .join(", "),
+    `[test-vision] vision model: ${process.env.NVIDIA_VISION_MODEL ?? "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"} (NVIDIA_API_KEY ${hasKey ? "set" : "NOT set"})`,
   );
   console.log("");
   const t0 = Date.now();

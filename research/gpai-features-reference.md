@@ -416,7 +416,7 @@ Not yet replicated in our clone (every view re-uploads).
 | PDF Notes | `src/components/PdfNotesView.tsx` (mode `"pdf-notes"`) | `src/app/api/educate/stream/route.ts` + `src/app/api/parse-pdf/route.ts` (PDF text extraction) |
 | Cheatsheet Builder | `src/components/CheatsheetView.tsx` (mode `"cheatsheet"`) | `src/app/api/educate/stream/route.ts` |
 | Notebook | `src/components/NotebookView.tsx` (mode `"notebook"`) | `src/app/api/educate/stream/route.ts` |
-| Vision / OCR | `src/lib/vision.ts` (`analyzeUploadedImages`) — multi-provider chain (NVIDIA NIM Llama-3.2-Vision → Gemini 2.0 Flash → Tesseract.js) with `[ATTACHMENT_UNREADABLE]` failure marker | invoked by `/api/educate/stream` and `/api/educate`; orchestrator hard-stops on the failure marker so unreadable attachments never reach the LLM |
+| Vision / OCR | `src/lib/vision.ts` (`analyzeUploadedImages`) — single NVIDIA call to `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` with `[ATTACHMENT_UNREADABLE]` failure marker | invoked by `/api/educate/stream` and `/api/educate`; orchestrator hard-stops on the failure marker so unreadable attachments never reach the LLM |
 | System + task prompts | `src/lib/prompts.ts` (`getSystemPrompt`, `buildTaskPrompt`) | shared across modes |
 | Orchestrator | `src/lib/orchestrator.ts` (`streamEducationalSolverDraft`, `runEducationalOrchestrator`) | shared |
 
@@ -430,25 +430,41 @@ When extending a feature, prefer to:
 3. Reuse `analyzeUploadedImages` and `parsePdf` for source ingestion — do
    NOT re-implement vision or PDF parsing.
 
-### Vision / OCR pipeline (post 2026-04-30 fix)
+### Vision / OCR pipeline (post 2026-05-02 simplification)
 
-`analyzeUploadedImages` in `src/lib/vision.ts` runs a fallback chain in this order:
+`analyzeUploadedImages` in `src/lib/vision.ts` is now a **single-call pipeline** — no fallback chain:
 
-1. **NVIDIA NIM** (`NVIDIA_API_KEY` / `NIM_API_KEY` / `NVIDIA_VISION_API_KEY`) — primary `meta/llama-3.2-11b-vision-instruct`, fallback `meta/llama-3.2-90b-vision-instruct`. 90B is more accurate but routinely times out at 40s on the free NIM tier so 11B is primary.
-2. **Google Gemini** (`GEMINI_API_KEY` / `GOOGLE_API_KEY`) — `gemini-2.0-flash`, free tier; **strongly recommended for handwritten math** because NIM 11B is unreliable on subtle exponents.
-3. **Tesseract.js** — pure WASM offline OCR, no API key. Best for printed text; weak on handwriting. Last-resort fallback so the system still produces some transcription with zero cloud keys configured.
+1. **NVIDIA `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`** at `https://integrate.api.nvidia.com/v1/chat/completions`. Same OpenAI-compatible endpoint we already use for text completions. Multimodal input via `{type: "image_url", image_url: {url: <base64-data-url>}}`. Reasoning trace disabled via `chat_template_kwargs.enable_thinking = false` for fast direct OCR. Auth: `NVIDIA_VISION_API_KEY ?? NVIDIA_IMAGE_TO_TEXT_API_KEY ?? NVIDIA_API_KEY ?? NIM_API_KEY`. Model overridable via `NVIDIA_VISION_MODEL` env var.
 
-Each provider can return `UNREADABLE: <reason>` (the model self-reporting it can't read the image) — the helper recognises that sentinel and advances the chain. If all providers fail, `extractedText` is set to `[ATTACHMENT_UNREADABLE] all OCR providers failed → <error summary>`.
+The model can return `UNREADABLE: <reason>` (self-reporting that it can't read the image) — the helper recognises that sentinel and surfaces it as `[ATTACHMENT_UNREADABLE] model could not read the image — <reason>`. The orchestrator (`runEducationalOrchestrator` and `streamEducationalSolverDraft` in `src/lib/orchestrator.ts`) checks the `ATTACHMENT_FAILURE_PREFIX` on every attachment. If all attachments failed, it returns a deterministic "couldn't read your file, please re-upload" markdown response and **never** calls the downstream solver LLM. This is what prevents the "uploaded an ODE, got a chemistry answer" hallucination class of bug.
 
-The orchestrator (`runEducationalOrchestrator` and `streamEducationalSolverDraft` in `src/lib/orchestrator.ts`) checks for the `ATTACHMENT_FAILURE_PREFIX` on every attachment. If **all** attachments failed, it returns a deterministic markdown response asking the user to re-upload — the LLM is **never** called with empty OCR. This is what prevents the "uploaded an ODE, got a chemistry answer" hallucination class of bug.
+**Why a single provider:** PRs #26 → #29 had built up a NVIDIA → Gemini → Tesseract chain to defend against the original "Mistral vision model that doesn't exist on NIM" bug. With a real, accurate, multimodal NVIDIA model now available (Nemotron Omni — released 2026-04-28), the chain is unnecessary complexity: more deps, more env vars, more places to misconfigure. The user asked for it removed; verified end-to-end against the same handwritten ODE photo that triggered the original bug.
+
+**Hosted-endpoint inline-image cap.** `integrate.api.nvidia.com` accepts base64 `image_url` data URLs up to ~1.7 MB; larger uploads stall with no response. The Composer (`src/components/Composer.tsx`) already client-side-compresses every image to ≤1600 px on the long edge / JPEG q 0.85, which lands well under this cap (typically 100–300 KB). `vision.ts` enforces a server-side `MAX_INLINE_IMAGE_BYTES = 1.7 MB` guard that surfaces a clear error instead of timing out for the rare uncompressed-upload path.
+
+**PDFs** still go through `unpdf` text extraction (works for digital-native textbook PDFs). Scanned PDFs are rejected with the existing `[ATTACHMENT_UNREADABLE] PDF contained no extractable text — likely scanned images. Re-upload as PNG/JPG screenshots so vision OCR can run.` Per-page rasterisation + Nemotron Omni OCR is a future improvement (would require shelling to poppler/pdftoppm or bundling pdf.js's canvas factory in Node; see Improvements section below).
+
+**Known limitations of Nemotron Omni on handwritten math:**
+
+- The model occasionally drops a single tiny exponent. On the canonical user test image (`(D⁴ − 2D³ + D²)y = x³`) it transcribes `(D − 2D³ + D²)y = x³` — perfectly verbatim apart from the leading `D⁴` exponent. The downstream solver still gets the correct equation family and produces a reasonable D-operator solution; this is far better than the chemistry/integral hallucinations of the prior pipeline.
+- Throughput is fast (~1–5 s per image at typical Composer-compressed sizes), so the 60 s `VISION_TIMEOUT_MS` is overkill — kept conservative for noisy networks.
 
 **Backend testing** lives in `scripts/`:
 
 ```sh
-# Test the OCR chain in isolation:
+# Test the single-call vision pipeline in isolation:
 npx tsx scripts/test-vision.ts /path/to/image.jpg
 
-# Round-trip the full /api/educate/stream against npm run dev:
+# Round-trip the full /api/educate/stream against `npm run dev`:
 npx tsx scripts/test-api.ts /path/to/image.jpg
 ```
+
+Both scripts read `NVIDIA_API_KEY` from `process.env` (NOT from `.env.local`), so export it in your shell before running.
+
+**Improvements / known follow-ups:**
+
+- **Recover dropped exponents.** Two complementary approaches: (a) prepend a few-shot example to `VISION_PROMPT` showing a transcribed handwritten ODE so the model attends to subscripts/superscripts more carefully; (b) when the transcription returned by Nemotron contains a `D` not followed by an exponent, optionally re-prompt with `enable_thinking: true` so the reasoning model can second-guess subtle handwriting. Currently both are unimplemented — the vanilla call is good enough for most cases and avoids extra latency.
+- **Scanned PDFs.** Add a server-side rasteriser path (poppler `pdftoppm` or pdf.js NodeCanvasFactory) so `extractPdfText` can fall back to per-page Nemotron OCR when `unpdf` returns empty text. Today, scanned PDFs fail with a "re-upload as image" message.
+- **NVCF Assets API for big images.** If we ever want to send uncompressed photos directly (no Composer compression), switch from inline `image_url` to the [NVCF Assets API](https://docs.api.nvidia.com/cloud-functions/reference/createasset) — upload the image once, reference it by asset ID in the chat call. Removes the 1.7 MB cap. Not currently needed because Composer compression keeps payloads tiny.
+- **Streaming OCR.** The Nemotron Omni call supports `stream: true`. We don't use it because the typical OCR response is <100 chars and arrives in <2 s. If we ever switch to longer multi-page transcriptions, streaming becomes worth wiring up so the orchestrator can start its solver pass before OCR fully finishes.
 

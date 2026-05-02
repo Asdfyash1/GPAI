@@ -26,11 +26,12 @@ NVIDIA_MODEL_DEEPSEEK_FLASH=deepseek-ai/deepseek-v4-flash
 NVIDIA_MODEL_LLAMA=meta/llama-3.3-70b-instruct
 ```
 
-For image-to-text analysis:
+For image-to-text analysis the app uses NVIDIA's `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` multimodal model (via the same hosted endpoint at `integrate.api.nvidia.com`). Reuses `NVIDIA_API_KEY` by default — no separate key required:
 
 ```bash
-NVIDIA_VISION_API_KEY=your_nvidia_vision_key
-NVIDIA_VISION_MODEL=mistralai/mistral-large-3-675b-instruct-2512
+# Optional overrides; defaults shown.
+NVIDIA_VISION_API_KEY=your_nvidia_vision_key   # falls back to NVIDIA_API_KEY
+NVIDIA_VISION_MODEL=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
 ```
 
 Optional additional OpenAI-compatible provider:
