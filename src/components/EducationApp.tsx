@@ -260,6 +260,30 @@ export function EducationApp() {
     }
   };
 
+  const handleRenameItem = (item: SidebarItem, newTitle: string) => {
+    const trimmed = newTitle.trim();
+    if (!trimmed || trimmed === item.title) return;
+    setHistory((prev) =>
+      prev.map((h) => (h.id === item.id ? { ...h, title: trimmed } : h)),
+    );
+    // Mirror the rename into the persistent stores so a reload reads
+    // the new title from the same source `onAddHistory` / chat-mode
+    // flows would.
+    if (item.mode === "chat") {
+      setChatSessions((prev) => {
+        const session = prev[item.id];
+        if (!session) return prev;
+        return { ...prev, [item.id]: { ...session, title: trimmed } };
+      });
+    } else {
+      setResponseStore((prev) => {
+        const stored = prev[item.id];
+        if (!stored) return prev;
+        return { ...prev, [item.id]: { ...stored, title: trimmed } };
+      });
+    }
+  };
+
   const handleDeleteItem = (item: SidebarItem) => {
     setHistory((prev) => prev.filter((h) => h.id !== item.id));
     if (item.mode === "chat") {
@@ -305,6 +329,7 @@ export function EducationApp() {
         activeItemId={activeItem}
         onSelect={handleSelectItem}
         onDelete={handleDeleteItem}
+        onRename={handleRenameItem}
         onNewTask={handleNewTask}
         onOpenSettings={() => setSettingsOpen(true)}
         userLabel="hiyash04+asd1"
