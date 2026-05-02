@@ -25,6 +25,7 @@ import type {
 } from "@/types/education";
 import { Composer } from "@/components/Composer";
 import { MathMarkdown } from "@/components/MathMarkdown";
+import { ModelAvatars, modelDisplay } from "@/components/ModelAvatars";
 import { useStream } from "@/hooks/useStream";
 
 type SolverViewProps = {
@@ -697,44 +698,62 @@ function CrossCheckBadge({ result }: { result: EducationResponse }) {
       </span>
     );
   }
+  const primary = modelDisplay(cc.primaryModel);
+  const secondary = modelDisplay(cc.secondaryModel);
+
   if (cc.status === "agree") {
-    const tooltip = `Cross-checked by ${cc.secondaryModel}: both models reached the same conclusion.`;
+    const tooltip = `Cross-checked by ${primary.short} + ${secondary.short}: both models reached the same conclusion.`;
     return (
       <span
         className="cross-checked-badge cross-checked-pass"
         title={tooltip}
       >
-        <CheckCircle2 size={14} /> Cross-checked
+        <ModelAvatars
+          primary={cc.primaryModel}
+          secondary={cc.secondaryModel}
+        />
+        <CheckCircle2 size={13} className="cross-checked-icon" />
+        Cross-checked
       </span>
     );
   }
   if (cc.status === "minor") {
     const tooltip = [
       `Models gave equivalent answers up to rounding/units.`,
-      `Primary (${cc.primaryModel}): ${cc.primaryAnswer ?? "(see solution)"}`,
-      `Secondary (${cc.secondaryModel}): ${cc.secondaryAnswer ?? "(see notes)"}`,
+      `${primary.short} (${cc.primaryModel}): ${cc.primaryAnswer ?? "(see solution)"}`,
+      `${secondary.short} (${cc.secondaryModel}): ${cc.secondaryAnswer ?? "(see notes)"}`,
     ].join("\n");
     return (
       <span
         className="cross-checked-badge cross-checked-minor"
         title={tooltip}
       >
-        <AlertTriangle size={14} /> Minor mismatch
+        <ModelAvatars
+          primary={cc.primaryModel}
+          secondary={cc.secondaryModel}
+        />
+        <AlertTriangle size={13} className="cross-checked-icon" />
+        Minor mismatch
       </span>
     );
   }
   if (cc.status === "disagree") {
     const tooltip = [
       `Models disagreed on the final answer.`,
-      `Primary (${cc.primaryModel}): ${cc.primaryAnswer ?? "(see solution)"}`,
-      `Secondary (${cc.secondaryModel}): ${cc.secondaryAnswer ?? "(see notes)"}`,
+      `${primary.short} (${cc.primaryModel}): ${cc.primaryAnswer ?? "(see solution)"}`,
+      `${secondary.short} (${cc.secondaryModel}): ${cc.secondaryAnswer ?? "(see notes)"}`,
     ].join("\n");
     return (
       <span
         className="cross-checked-badge cross-checked-fail"
         title={tooltip}
       >
-        <XCircle size={14} /> Models disagree
+        <ModelAvatars
+          primary={cc.primaryModel}
+          secondary={cc.secondaryModel}
+        />
+        <XCircle size={13} className="cross-checked-icon" />
+        Models disagree
       </span>
     );
   }
@@ -742,9 +761,10 @@ function CrossCheckBadge({ result }: { result: EducationResponse }) {
   return (
     <span
       className="cross-checked-badge cross-checked-skipped"
-      title={cc.notes ?? "Cross-check skipped."}
+      title={cc.notes ?? "Cross-check skipped (no secondary model configured)."}
     >
-      <Clock size={14} /> Cross-check skipped
+      <Clock size={13} className="cross-checked-icon" />
+      Cross-check skipped
     </span>
   );
 }
