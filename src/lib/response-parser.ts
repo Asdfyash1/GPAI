@@ -58,6 +58,46 @@ function parseSteps(markdown: string): SolutionStep[] {
   return steps;
 }
 
+/**
+ * Pull an inline "(Answer: X)" / "[Ans: X]" / "— Answer: X" suffix out of
+ * a question line. Returns the cleaned question + the extracted answer
+ * (or `null` if there was nothing inline).
+ *
+ * Older Solver prompts (pre-PR #41) explicitly told the model to
+ * format quiz items with the answer baked in like:
+ *
+ *   What is the order of (D-2D³+D²)y=x³? (Answer: 3)
+ *
+ * which made the answer leak into the rendered question text. The
+ * prompt has since been changed to require a two-line Q:/A: shape, but
+ * this stripping pass keeps the old shape working for cached
+ * responses, prompt drift, and any other model that ignores
+ * instructions.
+ */
+function stripInlineAnswer(line: string): { question: string; answer: string | null } {
+  // `(Answer: ...)` / `(Ans.: ...)` / `[Answer: ...]` etc. anywhere in the
+  // line. Greedy on the answer body so trailing punctuation stays attached.
+  const inlineRe = /[\s,;—–-]*[(\[]\s*A(?:nswer|ns\.?)?\s*[:=]\s*([^()\[\]]+?)\s*[)\]][.?!]?\s*$/i;
+  const inlineMatch = line.match(inlineRe);
+  if (inlineMatch) {
+    return {
+      question: line.slice(0, inlineMatch.index).trim().replace(/[—–-]+\s*$/, "").trim(),
+      answer: inlineMatch[1].trim(),
+    };
+  }
+  // `— Answer: X` / `Answer — X` style at the end of the line, no
+  // brackets. Require a clear delimiter so we don't eat normal prose.
+  const dashRe = /\s+(?:[—–-]+|→)\s*A(?:nswer|ns\.?)?\s*[:=]\s*(.+?)\s*$/i;
+  const dashMatch = line.match(dashRe);
+  if (dashMatch) {
+    return {
+      question: line.slice(0, dashMatch.index).trim(),
+      answer: dashMatch[1].trim(),
+    };
+  }
+  return { question: line, answer: null };
+}
+
 function parseQAItems(section: string): PracticeItem[] {
   if (!section.trim()) return [];
   const items: PracticeItem[] = [];
@@ -69,9 +109,19 @@ function parseQAItems(section: string): PracticeItem[] {
       .replace(/^\d+[.)]\s*/, "")
       .replace(/^[-*•]\s*/, "")
       .replace(/^\*\*Q(?:uestion)?[:.]?\*\*\s*/i, "")
+      .replace(/^Q(?:uestion)?\s*[:.]\s*/i, "")
       .trim();
 
     if (line.length <= 5) continue;
+
+    // Pull "(Answer: X)" off the question first so we never let it
+    // visually leak into the rendered question text. If found, that
+    // also satisfies the next-line answer check.
+    const inline = stripInlineAnswer(line);
+    if (inline.answer) {
+      items.push({ question: inline.question, answer: inline.answer });
+      continue;
+    }
 
     const nextLine = lines[i + 1] || "";
     const isAnswer = /^\s*\*\*A(?:nswer)?[:.]?\*\*/i.test(nextLine) ||
