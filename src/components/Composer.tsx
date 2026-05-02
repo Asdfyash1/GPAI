@@ -25,6 +25,7 @@ import {
   extractTextFileClient,
   isPdfFile,
   isTextLikeFile,
+  rasterizePdfToImagesClient,
 } from "@/lib/client-extract";
 
 type ModelOption = {
@@ -166,16 +167,45 @@ export function Composer(props: ComposerProps) {
           // PDFs: extract text in the browser and ship just the text.
           // This keeps multi-MB PDFs (well past Vercel's 4.5 MB body
           // limit) usable inside Solver / Chat / Cheatsheet.
+          //
+          // If the PDF has no text layer (scanned exam paper, photographed
+          // textbook chapter, etc.), rasterize each page to a JPEG and
+          // ship those as image attachments so the existing Nemotron
+          // vision OCR pipeline can transcribe them.
           if (isPdfFile(file)) {
             const { text } = await extractPdfTextClient(file);
-            next.push({
-              name: file.name,
-              type: "application/pdf",
-              size: file.size,
-              extractedText:
-                text ||
-                `[PDF "${file.name}" had no extractable text — likely a scanned image. Re-upload as a PNG/JPG screenshot for vision OCR.]`,
-            });
+            if (text) {
+              next.push({
+                name: file.name,
+                type: "application/pdf",
+                size: file.size,
+                extractedText: text,
+              });
+              continue;
+            }
+
+            const { totalPages, pages, truncated } =
+              await rasterizePdfToImagesClient(file);
+            if (pages.length === 0) {
+              errors.push(
+                `"${file.name}": couldn't render PDF pages for OCR — try uploading a screenshot of the page you care about.`,
+              );
+              continue;
+            }
+            for (const { pageNumber, dataUrl } of pages) {
+              next.push({
+                name: `${file.name} — page ${pageNumber}/${totalPages}`,
+                type: "image/jpeg",
+                size: dataUrl.length,
+                dataUrl,
+                preview: dataUrl,
+              });
+            }
+            if (truncated) {
+              setPickError(
+                `"${file.name}" is ${totalPages} pages but only the first ${pages.length} were sent for OCR (Vercel request-body limit). Crop to the section you care about and re-upload if you need a later page.`,
+              );
+            }
             continue;
           }
 
