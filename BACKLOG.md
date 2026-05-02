@@ -160,17 +160,34 @@ These are gpai.app gaps and outperform-opportunities that haven't been scoped in
 
 ## Next-session priority order (read this first)
 
-If you only have a few hours, ship in this order — each one is independently small enough to be a single PR:
+**Tier A #3 — Inline orange glossary terms** is the only remaining Tier A item and the next thing to ship. Everything else in Tier A (auto-titled tasks, CrossCheckBadge polish, quiz panel, follow-up chips, demo carousel, Personalize tab, cross-check indicator) is already merged and live.
 
-1. **Quiz + Follow-up questions panels** (top of Critical bugs) — biggest remaining user-visible issue. Wire chip handlers + Quiz tab to `/api/chat` and `/api/quiz`. See description above for the suggested plan.
-2. **Mobile print backstop** (Critical bugs) — 4-line change × 3 files. Branch `devin/<ts>-print-backstop`.
-3. **Cross-device shareable URL `/api/publish`** — see Feature planning. Without this, `?taskId=` is useless across devices and "share" UX feels broken.
-4. **Light theme polish** — there's a topbar toggle but several views were dark-only. Audit `solver-view`, `chat`, `cheatsheet-page`, `notebook-page`, `visualizer-canvas` against `[data-theme="light"]`.
-5. **Visualizer SMILES rendering** for chemistry prompts.
-6. **Solver step-by-step reveal mode** (gpai.app does this; we dump all steps at once).
-7. Items 6-13 in Feature planning, in any order.
+After Tier A #3 lands, all of Tier A is done — pause and confirm with the user before starting Tier B.
 
-After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="create")` after `git_pr(action="fetch_template")`. Wait for CI green via `git(action="pr_checks")`. Append a Changelog entry below and tick the BACKLOG checkbox in the same PR.
+### Tier A #3 implementation sketch (M effort, ~1–2 day PR)
+
+Read `research/audit-2026-05-02/findings.md` §2.5 first (and `research/screenshots/audit-2026-05-02/14-solver-glossary-hover.png` for the exact UI). Then:
+
+1. **Prompt** (`src/lib/prompts.ts` Solver prompt) — add a rule: *"Identify 3–7 technical terms a learner might not know. Return them in a `Glossary:` section as `term — short definition` lines."*
+2. **Parser** (`src/lib/response-parser.ts`) — add `parseGlossarySection()` returning `{ term, definition }[]`. Mirror the existing `parseQuizSection` / `parseFollowUpsSection` shape.
+3. **Type** (`src/types/education.ts`) — add `glossary?: GlossaryEntry[]` to `EducateResponse`.
+4. **Component** (`src/components/GlossaryTerm.tsx`) — wrap a span; render Radix tooltip on hover (definition); on click open a mini chat panel that POSTs to `/api/chat` with `{ term, definition, parentProblem }` as system context.
+5. **Renderer** (`src/components/SolverView.tsx`) — post-process the streamed `solution` markdown: walk text nodes, replace term occurrences with `<GlossaryTerm>` (regex with word boundaries). **Skip code blocks, KaTeX (`$…$`, `$$…$$`), and links** — unit-test the regex carefully.
+6. **Style** (`src/app/globals.css`) — orange underline, `cursor: help`, tooltip card, mini chat sheet. All mobile-specific rules go inside `@media (max-width: 720px)`.
+7. **Output coverage** — apply to Solver Solution + Cross-check + Common mistakes, Cheatsheet body, Notebook chat replies. **NOT** to user-typed text.
+
+### Smaller items to consider after Tier A #3
+
+If you have leftover time after Tier A #3:
+
+- **Mobile print backstop** (Critical bugs) — 4-line change × 3 files. Branch `devin/<ts>-print-backstop`.
+- **Cross-device shareable URL `/api/publish`** — see Feature planning. Without this, `?taskId=` is useless across devices.
+- **Light theme polish** — topbar toggle exists but several views were dark-only. Audit `solver-view`, `chat`, `cheatsheet-page`, `notebook-page`, `visualizer-canvas` against `[data-theme="light"]`.
+- **Visualizer SMILES rendering** for chemistry prompts.
+- **Solver step-by-step reveal mode** (gpai.app does this; we dump all steps at once).
+- Then Tier B (PRs 8–13: parallel streaming, Download modal, public share, Quiz/Flashcard/Practice Test variants, adaptive follow-up cards).
+
+After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all three must be clean), then `git_pr(action="create")` after `git_pr(action="fetch_template")`. Wait for CI green via `git(action="pr_checks")`. Append a Changelog entry below and tick the BACKLOG checkbox in the same PR.
 
 ## Open Devin Review findings (carry-over across sessions)
 
@@ -179,11 +196,12 @@ After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="crea
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — fix: scanned-PDF OCR FUNCTION_PAYLOAD_TOO_LARGE iteration 3:** _PR pending._
+- **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — fix: scanned-PDF OCR FUNCTION_PAYLOAD_TOO_LARGE iteration 3:** _PR #46 (merged)._
   - **Why this exists:** even after PR #45 the user re-tested on phone and hit `FUNCTION_PAYLOAD_TOO_LARGE` again on `/api/chat` when uploading the 41-page scanned `C++DS.pdf`. Root cause was a separate, more dangerous bug in chat history serialization — the rasterizer cap from PR #45 was working fine for the first turn, but every subsequent turn was duplicating the previous turns' attachment dataUrls into the body.
   - **Fix #1 — chat history attachment de-bloating (`src/components/ChatView.tsx`):** when serializing `messages` for `/api/chat`, every attachment on a *non-last-user* message is now stripped down to `{name, type, size, extractedText}` — the multi-MB `dataUrl` is dropped. The chat route only re-analyzes the *last user* message's attachments anyway (see `route.ts:27` `lastUser.attachments`), so historical dataUrls are pure body bloat. Without this fix a 3 MB scanned-PDF upload doubled to 6 MB on the second turn (>Vercel 4.5 MB cap), then 9 MB, etc., and the chat would lock up after 1-2 messages until the user manually started a new chat.
   - **Fix #2 — rasterizer defense-in-depth (`src/lib/client-extract.ts`):** tightened `RASTER_DEFAULTS` from `{scale: 1.6, quality: 0.7, maxPages: 24, maxTotalBytes: 3_500_000}` to `{scale: 1.4, quality: 0.6, maxPages: 16, maxTotalBytes: 2_200_000}`. The old budget left only ~1 MB headroom under Vercel's cap, which evaporates as soon as chat history grows. New budget caps the rasterized payload at ~2.2 MB so even with several rounds of extracted-text history a request fits comfortably. OCR quality is essentially unchanged because Nemotron's vision tower internally downsamples above ~1024 px on the long edge anyway.
-  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean.
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean. CI green on PR #46, merged into `main` (commit `92f7ac6`).
+  - **Tier A status unchanged:** Tier A #3 (inline orange glossary terms) is still the only remaining Tier A item. **Pick that up next** — see the "Next-session priority order" section above.
 
 - **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — fix: scanned-PDF OCR fallback + mobile polish iteration 2:** _PR #45._
   - **Why this exists:** user re-tested on phone after PR #43 and reported "the pdf I uploaded is saying 'It looks like the PDF you're referring to is a scanned image' … make it handle this and improve mobile friendly." Confirmed locally — their `C++DS.pdf` is 41 pages × 0 chars of extractable text (pure image scan). The previous PR #43 client-side path correctly identified the empty extract and the model honestly told them to re-upload as PNG, but for a 41-page document that's not a real fix.
@@ -636,155 +654,3 @@ Effort scale: XS = <½ day · S = ½–1 day · M = 1–2 days · L = 2–5 days
   cosmetic — don't ship without the actual cross-check pipeline being
   visually correct (Tier A #2 first).
 
----
-
-## Handover Prompt for Next Session
-
-> Copy-paste EVERYTHING below (from the `---` line down) into the next Devin
-> session verbatim.
-
----
-
-You are continuing work on **`Asdfyash1/GPAI`** — a clone of gpai.app rebranded
-as **Forge**. Repo at `/home/ubuntu/repos/GPAI`. Previous session URL:
-https://app.devin.ai/sessions/1fcd2760b5f2450ab653b9bf5ad563ee
-
-### What just happened
-
-The previous session did **a comprehensive deep-dive audit** of every gpai.app
-feature (except pricing/billing) — captured exact response markdown, UI
-behavior, model selectors, export modals, share popups, follow-up chip
-behavior, and 46 fresh screenshots. **No code was changed** — the audit PR is
-research-only.
-
-### Files you MUST read first (in this order)
-
-1. **`research/audit-2026-05-02/findings.md`** — full audit write-up. Sections:
-   1 (top-level chrome) → 2 (Solver) → 3 (Visualizer) → 4 (AI Chat) → 5 (Cheatsheet) →
-   6 (Report Writer) → 7 (PDF Notes) → 8 (Notebook) → 9 (cross-feature patterns) →
-   10 (Korean origin clue) → 11 (gap list) → 12 (audit metadata).
-2. **`research/screenshots/audit-2026-05-02/`** — 46 numbered screenshots.
-   Filenames map directly to sections (`01-…16-…` = Solver,
-   `17-22` = Home/Settings, `23-33` = Visualizer, `34-35` = AI Chat,
-   `36-37` = Cheatsheet, `38-39` = Report Writer, `40-42` = PDF Notes,
-   `43-46` = Notebook).
-3. **`research/gpai-features-reference.md` §13** — additions from this audit
-   summarised back into the canonical reference doc.
-4. **`BACKLOG.md` "Feature Audit Findings — 2026-05-02"** — the
-   stack-ranked gap list. Read the entire section before starting work.
-
-### What to do next
-
-The user said: *"deep dive every feature present in gpai ai even this seesion is
-closed u should not stop untill ur finish weery feature."* So the long-term
-goal is to **close every gap** between Forge and gpai.app.
-
-**Ship gap-closure PRs in this order** (matches BACKLOG.md tier order):
-
-#### Phase 1 — Tier A (week 1, every PR ½–1 day)
-
-Each of these is a small focused PR. Ship them one at a time, in order. Do
-NOT batch them together — small PRs land faster and reviewer can verify each
-gap closes cleanly.
-
-- ✅ **PR 1: Auto-titled tasks** (Tier A #1, XS) — **MERGED in PR #36**.
-- ✅ **PR 2: CrossCheckBadge avatar polish** (Tier A #2, S) — **MERGED in
-  PR #38**.
-- ✅ **PR 3: Quiz panel functional** (Tier A #4, S) — **MERGED in PR #41**.
-- ✅ **PR 4: Follow-up chips functional** (Tier A #5, S) — **MERGED in
-  PR #40**.
-- ✅ **PR 5: Try-demo carousel + Personalize tab** (Tier A #6 + #7, S) —
-  **MERGED in PR #39**.
-- ✅ **PR 6: Cross-check indicator on model selector** (Tier A #8, XS) —
-  **MERGED in PR #37**.
-- **PR 7: Inline orange glossary terms** (Tier A #3, M) — Post-process
-  streamed markdown with a glossary LLM pass; render as `<dfn class=
-  "glossary-term">` with click-to-define tooltip. Apply to Solver, Chat,
-  PDF Notes, Cheatsheet. Largest of Tier A — ship last.
-
-After Tier A, the user-visible gap should drop ~50% with limited code
-churn. Pause and confirm with the user before starting Tier B.
-
-#### Phase 2 — Tier B (week 2-3)
-
-PRs 8-13 from BACKLOG.md (streaming sections in parallel, Download modal,
-public share, Quiz/Flashcard/Practice Test, adaptive follow-up cards). Each
-is M-effort; budget ~2-3 PRs per session.
-
-#### Phase 3 — Tier C (multi-week)
-
-PRs 14-19 are large rebuilds. The first one — **specialized Visualizer
-agents** — is XL effort but the highest-impact gap in the entire audit.
-Consider doing this as a multi-PR series:
-1. Agent router (classifies prompts into bucket).
-2. Graph AI + Flowchart AI (lowest-effort agents).
-3. Diagram AI + Circuit AI.
-4. Chemistry AI + Logic AI.
-5. Illustration AI (highest-effort: needs an image gen model).
-6. Canvas editor wrap.
-
-### Quirks to mimic (model API behaviors)
-
-- gpai.app streams `Answer` and `Solution` **in parallel** — backend emits
-  structured `{section, delta}` events. Forge today emits a flat text stream.
-- gpai.app auto-titles tasks with a separate API call after the response,
-  not inline.
-- gpai.app's `Cross-checked` badge is from a parallel-verifier pipeline with
-  a 3rd LLM judge (we have this; UI polish is what's missing).
-- gpai.app's Visualizer is a router across 9 specialized agents — single-model
-  approaches cannot match the output style.
-- gpai.app's Cheatsheet has versioning — the chat refers to the latest version
-  by default but you can switch to older ones.
-- Daily credit consumption: Solver ≈ 30, Quiz ≈ 5, Follow-up chip ≈ 5.
-- PDF Notes uses a SEPARATE "2 free per day during Beta" quota, not credits.
-- The Notebook leaked Korean placeholder confirms gpai.app's primary market
-  is Korean. Be aware for i18n discussions.
-
-### What's safe to skip
-
-- **Pricing / billing / subscription** — explicitly excluded by the user.
-- **Visualizer Figma-lite canvas editor** — defer until 9-agent router ships.
-  Canvas is gravy on top.
-- **YouTube / Drive / audio / video** Notebook source types — defer until
-  PDF + image + text Notebook works end-to-end.
-- **Korean / RTL i18n** — the Korean origin is a curiosity, not a blocker.
-- **Daily quota system** — Forge doesn't need this.
-
-### What NOT to do
-
-- Don't refactor for "cleanliness" without a user-facing gap to close. Every
-  PR should map to a numbered gap from `BACKLOG.md`.
-- Don't ship a Visualizer canvas editor before the agent router. The
-  router is the value.
-- Don't change the OCR pipeline — `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`
-  is the verified single-call model from PR #31 and #33. Do not regress to
-  multi-provider chains.
-- Don't add Mistral, Groq, OpenRouter, or any paid third-party providers
-  (user explicitly vetoed).
-- Don't force-push to main. Use `devin/$(date +%s)-<short-name>` branches.
-- Don't `git add .` — stage only the files you intend to ship.
-
-### Standing user rules
-
-- Always update `BACKLOG.md` in every PR with what you did + what's next, so
-  the next session can pick up cleanly.
-- Always run `npx tsc --noEmit && npm run lint && npm run build` before
-  pushing. All three must be clean.
-- Always create a PR via `git_pr(action="fetch_template")` then
-  `git_pr(action="create")`. Update `BACKLOG.md` + reference doc as part of
-  every PR.
-- Always include the Vercel preview URL in your final message to the user.
-
-### Your first message to the user
-
-Something like:
-
-> "Picked up from the previous session's audit. Read
-> `research/audit-2026-05-02/findings.md` and the BACKLOG. Starting with Tier A
-> PR 1 — auto-titled tasks (Forge currently shows timestamp IDs in the sidebar;
-> gpai.app shows LLM-extracted titles like 'Ordinary Differential Equation').
-> Will ship as a single small PR. ~30 min ETA."
-
-Then start working. Do not block on the user before shipping the first PR —
-they've already approved the gap-closure direction. Just keep them updated
-with PR links as each one merges.
