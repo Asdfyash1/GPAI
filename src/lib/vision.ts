@@ -1,34 +1,20 @@
 import type { UploadedAsset } from "@/types/education";
 
 const NVIDIA_VISION_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const GEMINI_VISION_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models";
 
-// Default vision model on NVIDIA NIM. The previous default
-// (`mistralai/mistral-large-3-675b-instruct-2512`) does not exist in NIM's
-// catalog — calling it 404'd silently and forced the LLM to hallucinate a
-// problem from no transcription. Llama-3.2-90B Vision is the proven
-// vision-language model on NIM and handles handwritten math reliably.
-// 11B is the primary because 90B is consistently slow on NVIDIA's free NIM
-// tier (we observed >40s timeouts in every test run). 90B is kept as a
-// fallback in case it becomes responsive. For the most reliable handwritten
-// math OCR, configure GEMINI_API_KEY — Gemini 2.0 Flash has a free tier and
-// is dramatically more accurate on subtle exponents/subscripts.
-const NVIDIA_DEFAULT_VISION_MODEL = "meta/llama-3.2-11b-vision-instruct";
-const NVIDIA_FALLBACK_VISION_MODEL = "meta/llama-3.2-90b-vision-instruct";
-const GEMINI_DEFAULT_VISION_MODEL = "gemini-2.0-flash";
+// Nemotron-3-Nano Omni 30B is a multimodal reasoning model that handles
+// handwritten math OCR far more accurately than the previous Llama-3.2 vision
+// models (which confidently misread exponents/subscripts). This is the sole
+// vision provider — no Gemini/Tesseract fallback chain needed.
+const NVIDIA_DEFAULT_VISION_MODEL =
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_EXTRACTED_CHARS = 12_000;
-// Per-attempt timeout for cloud vision providers. Tight enough that we move
-// to the next provider quickly when one is hung; loose enough to give the
-// 90B fallback a real chance (it's slower than 11B). Tesseract.js gets its
-// own (longer) timeout because the WASM model is slow.
-const VISION_TIMEOUT_MS = 40_000;
-const VISION_MAX_TOKENS = 1024;
-const TESSERACT_TIMEOUT_MS = 30_000;
+const VISION_TIMEOUT_MS = 60_000;
+const VISION_MAX_TOKENS = 4096;
 
 const VISION_PROMPT = [
   "You are an OCR engine for a STEM tutoring app. Look at the image and transcribe the academic content exactly as it appears on the page.",
@@ -71,13 +57,6 @@ type NvidiaVisionResponse = {
   error?: { message?: string };
 };
 
-type GeminiVisionResponse = {
-  candidates?: Array<{
-    content?: { parts?: Array<{ text?: string }> };
-  }>;
-  error?: { message?: string };
-};
-
 function nvidiaVisionApiKey(): string | undefined {
   return (
     process.env.NVIDIA_VISION_API_KEY ??
@@ -85,23 +64,6 @@ function nvidiaVisionApiKey(): string | undefined {
     process.env.NVIDIA_API_KEY ??
     process.env.NIM_API_KEY
   );
-}
-
-function geminiApiKey(): string | undefined {
-  return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-}
-
-function isVisionDebug(): boolean {
-  return process.env.VISION_DEBUG === "1" || process.env.NODE_ENV !== "production";
-}
-
-function logDebug(message: string, extra?: unknown) {
-  if (!isVisionDebug()) return;
-  if (extra !== undefined) {
-    console.log(`[vision] ${message}`, extra);
-  } else {
-    console.log(`[vision] ${message}`);
-  }
 }
 
 async function fetchJsonWithTimeout<T>(
@@ -142,7 +104,7 @@ async function fetchJsonWithTimeout<T>(
 }
 
 // ---------------------------------------------------------------------------
-// Provider 1: NVIDIA NIM Vision (Llama-3.2-90B Vision by default)
+// NVIDIA NIM Vision (Nemotron-3-Nano Omni 30B Reasoning)
 // ---------------------------------------------------------------------------
 
 async function tryNvidiaModel(
@@ -155,6 +117,23 @@ async function tryNvidiaModel(
     { type: "image_url", image_url: { url: asset.dataUrl ?? "" } },
   ];
 
+  const isReasoningModel =
+    modelName.includes("reasoning") || modelName.includes("omni");
+
+  const body: Record<string, unknown> = {
+    model: modelName,
+    messages: [{ role: "user", content }],
+    max_tokens: VISION_MAX_TOKENS,
+    temperature: 0.2,
+    top_p: 0.95,
+    stream: false,
+  };
+
+  if (isReasoningModel) {
+    body.chat_template_kwargs = { enable_thinking: false };
+    body.reasoning_budget = 16384;
+  }
+
   const result = await fetchJsonWithTimeout<NvidiaVisionResponse>(
     NVIDIA_VISION_URL,
     {
@@ -164,14 +143,7 @@ async function tryNvidiaModel(
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: modelName,
-        messages: [{ role: "user", content }],
-        max_tokens: VISION_MAX_TOKENS,
-        temperature: 0,
-        top_p: 1,
-        stream: false,
-      }),
+      body: JSON.stringify(body),
     },
     VISION_TIMEOUT_MS,
   );
@@ -197,203 +169,8 @@ async function tryNvidiaModel(
   return { ok: true, text, provider: `nvidia:${modelName}` };
 }
 
-async function tryNvidia(asset: UploadedAsset): Promise<ProviderResult | null> {
-  const key = nvidiaVisionApiKey();
-  if (!key) return null;
-
-  const primary = process.env.NVIDIA_VISION_MODEL ?? NVIDIA_DEFAULT_VISION_MODEL;
-  const fallback =
-    process.env.NVIDIA_VISION_FALLBACK_MODEL ?? NVIDIA_FALLBACK_VISION_MODEL;
-
-  const first = await tryNvidiaModel(asset, key, primary);
-  if (first.ok) return first;
-  logDebug(`NVIDIA primary (${primary}) failed: ${first.error}`);
-
-  if (fallback && fallback !== primary) {
-    const second = await tryNvidiaModel(asset, key, fallback);
-    if (second.ok) return second;
-    logDebug(`NVIDIA fallback (${fallback}) failed: ${second.error}`);
-    return second;
-  }
-
-  return first;
-}
-
 // ---------------------------------------------------------------------------
-// Provider 2: Google Gemini 2.0 Flash (free tier)
-// ---------------------------------------------------------------------------
-
-function dataUrlToInline(dataUrl: string):
-  | { mimeType: string; data: string }
-  | null {
-  const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl);
-  if (!match) return null;
-  return { mimeType: match[1], data: match[2] };
-}
-
-async function tryGemini(asset: UploadedAsset): Promise<ProviderResult | null> {
-  const key = geminiApiKey();
-  if (!key) return null;
-  const inline = asset.dataUrl ? dataUrlToInline(asset.dataUrl) : null;
-  if (!inline) {
-    return {
-      ok: false,
-      error: "data URL was not base64-encoded",
-      provider: "gemini",
-    };
-  }
-
-  const modelName =
-    process.env.GEMINI_VISION_MODEL ?? GEMINI_DEFAULT_VISION_MODEL;
-  const url = `${GEMINI_VISION_URL}/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(key)}`;
-
-  const result = await fetchJsonWithTimeout<GeminiVisionResponse>(
-    url,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: VISION_PROMPT },
-              { inlineData: { mimeType: inline.mimeType, data: inline.data } },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.15,
-          maxOutputTokens: VISION_MAX_TOKENS,
-        },
-      }),
-    },
-    VISION_TIMEOUT_MS,
-  );
-
-  if (!result.ok) {
-    return { ok: false, error: result.error, provider: `gemini:${modelName}` };
-  }
-  const text = result.data.candidates?.[0]?.content?.parts
-    ?.map((p) => p.text ?? "")
-    .join("\n")
-    .trim();
-  if (!text) {
-    return {
-      ok: false,
-      error: "empty response",
-      provider: `gemini:${modelName}`,
-    };
-  }
-  if (UNREADABLE_SENTINEL.test(text)) {
-    return {
-      ok: false,
-      error: `model says unreadable: ${text.replace(UNREADABLE_SENTINEL, "").trim().slice(0, 120)}`,
-      provider: `gemini:${modelName}`,
-    };
-  }
-  return { ok: true, text, provider: `gemini:${modelName}` };
-}
-
-// ---------------------------------------------------------------------------
-// Provider 3: Tesseract.js (free, offline OCR — no API key required)
-// ---------------------------------------------------------------------------
-
-async function tryTesseract(asset: UploadedAsset): Promise<ProviderResult> {
-  if (!asset.dataUrl) {
-    return { ok: false, error: "no data URL", provider: "tesseract" };
-  }
-  const bytes = bytesFromDataUrl(asset.dataUrl);
-  if (bytes.byteLength === 0) {
-    return { ok: false, error: "image is empty", provider: "tesseract" };
-  }
-  const buffer = Buffer.from(bytes);
-
-  try {
-    // Lazy-import keeps the WASM blob off the happy path's cold start.
-    // tesseract.js v7 exposes `recognize` as a named export under ESM,
-    // but when bundled as CommonJS (Node default for our scripts) it lives
-    // on `.default`. Handle both shapes.
-    const mod = (await import("tesseract.js")) as unknown as {
-      recognize?: (
-        image: unknown,
-        lang?: string,
-        opts?: { logger?: (m: unknown) => void },
-      ) => Promise<{ data: { text?: string } }>;
-      default?: {
-        recognize?: (
-          image: unknown,
-          lang?: string,
-          opts?: { logger?: (m: unknown) => void },
-        ) => Promise<{ data: { text?: string } }>;
-      };
-    };
-    const recognize = mod.recognize ?? mod.default?.recognize;
-    if (typeof recognize !== "function") {
-      return {
-        ok: false,
-        error: "tesseract.js recognize() is not available",
-        provider: "tesseract",
-      };
-    }
-
-    // tesseract.js does NOT accept an AbortSignal for single-call
-    // `recognize()`, so an AbortController would be inert. We race the
-    // recognition against a timeout so the caller gets a timely failure
-    // instead of hanging the serverless function. The WASM computation
-    // itself cannot be cancelled — it will still run to completion on the
-    // worker and eventually be GC'd, but we unblock the fallback chain
-    // and the HTTP response well before maxDuration.
-    //
-    // The timer handle is cleared in a finally block so the Node event
-    // loop doesn't stay alive for the full TESSERACT_TIMEOUT_MS after
-    // recognition wins the race (matters on Vercel billing and for the
-    // standalone test scripts in scripts/).
-    const recognition = recognize(buffer, "eng", { logger: () => {} });
-    let timerId: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timerId = setTimeout(
-        () =>
-          reject(
-            new Error(
-              `tesseract timed out after ${TESSERACT_TIMEOUT_MS / 1000}s`,
-            ),
-          ),
-        TESSERACT_TIMEOUT_MS,
-      );
-    });
-    let raceResult: { data: { text?: string } };
-    try {
-      raceResult = await Promise.race([recognition, timeout]);
-    } finally {
-      if (timerId !== undefined) clearTimeout(timerId);
-    }
-    const { data } = raceResult;
-    const text = (data?.text ?? "").trim();
-    if (!text) {
-      return {
-        ok: false,
-        error: "no readable text",
-        provider: "tesseract",
-      };
-    }
-    return {
-      ok: true,
-      text:
-        "Tesseract OCR transcript (text-only, no AI interpretation):\n\n" +
-        text,
-      provider: "tesseract",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "unknown error",
-      provider: "tesseract",
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Top-level: try all providers in order, first ok wins.
+// Top-level: NVIDIA-only vision with structured logging.
 // ---------------------------------------------------------------------------
 
 async function describeImage(asset: UploadedAsset): Promise<string> {
@@ -406,72 +183,37 @@ async function describeImage(asset: UploadedAsset): Promise<string> {
     );
   }
 
-  const hasGeminiKey = !!geminiApiKey();
-  const hasNvidiaKey = !!nvidiaVisionApiKey();
+  const key = nvidiaVisionApiKey();
+  if (!key) {
+    return failureText(
+      "no NVIDIA API key configured — set NVIDIA_API_KEY in environment variables",
+    );
+  }
+
+  const modelName =
+    process.env.NVIDIA_VISION_MODEL ?? NVIDIA_DEFAULT_VISION_MODEL;
+
   console.log(
-    `[vision] describeImage called — geminiKey=${hasGeminiKey}, nvidiaKey=${hasNvidiaKey}, ` +
-    `order=${hasGeminiKey ? "gemini→nvidia→tesseract" : "nvidia→gemini→tesseract"}, ` +
+    `[vision] describeImage called — model=${modelName}, ` +
     `imageType=${asset.type}, dataUrlLen=${asset.dataUrl.length}`,
   );
 
-  const errors: string[] = [];
+  const result = await tryNvidiaModel(asset, key, modelName);
 
-  // Provider ordering: Gemini 2.0 Flash is dramatically more accurate on
-  // handwritten math than NIM's free-tier Llama-3.2-11B-Vision (NIM 11B
-  // frequently misreads subtle exponents/subscripts and returns confidently
-  // wrong transcripts — which this chain would previously accept on the first
-  // `ok: true` and never try Gemini at all). So when GEMINI_API_KEY is
-  // configured, prefer Gemini as the primary provider and keep NVIDIA as the
-  // fallback. This only affects which provider runs first; the "first ok
-  // wins" semantics are unchanged. Tesseract.js is always the last resort.
-  const providers: Array<() => Promise<ProviderResult | null>> = geminiApiKey()
-    ? [
-        () => tryGemini(asset),
-        () => tryNvidia(asset),
-        () => tryTesseract(asset),
-      ]
-    : [
-        () => tryNvidia(asset),
-        () => tryGemini(asset),
-        () => tryTesseract(asset),
-      ];
-
-  for (let idx = 0; idx < providers.length; idx++) {
-    const run = providers[idx];
-    console.log(`[vision] attempting provider ${idx + 1}/${providers.length}`);
-    let result: ProviderResult | null;
-    try {
-      result = await run();
-    } catch (error) {
-      result = {
-        ok: false,
-        error: error instanceof Error ? error.message : "unknown",
-        provider: "unknown",
-      };
-    }
-    if (!result) {
-      console.log(`[vision] provider ${idx + 1} skipped (not configured)`);
-      continue;
-    }
-    if (result.ok) {
-      console.log(
-        `[vision] accepted ${result.provider} (${result.text.length} chars): ${result.text.slice(0, 200).replace(/\n/g, " ")}…`,
-      );
-      return result.text;
-    }
-    errors.push(`${result.provider}: ${result.error}`);
-    console.log(`[vision] rejected ${result.provider}: ${result.error}`);
+  if (result.ok) {
+    console.log(
+      `[vision] accepted ${result.provider} (${result.text.length} chars): ` +
+      `${result.text.slice(0, 200).replace(/\n/g, " ")}…`,
+    );
+    return result.text;
   }
 
-  return failureText(
-    errors.length > 0
-      ? `all OCR providers failed → ${errors.join(" | ")}`
-      : "no OCR provider configured (set NVIDIA_API_KEY and/or GEMINI_API_KEY, or rely on Tesseract.js — but the image was unreadable to Tesseract too)",
-  );
+  console.log(`[vision] rejected ${result.provider}: ${result.error}`);
+  return failureText(`OCR failed → ${result.provider}: ${result.error}`);
 }
 
 // ---------------------------------------------------------------------------
-// Non-image attachments (unchanged from before).
+// Non-image attachments.
 // ---------------------------------------------------------------------------
 
 function bytesFromDataUrl(dataUrl: string): Uint8Array {
@@ -545,9 +287,8 @@ function isPdfAsset(asset: UploadedAsset): boolean {
 }
 
 /**
- * Backwards-compatible name; analyses every supported attachment and
- * fills in `extractedText`. Now handles:
- *   - images via the multi-provider OCR chain (NVIDIA → Gemini → Tesseract.js)
+ * Analyses every supported attachment and fills in `extractedText`:
+ *   - images via NVIDIA Nemotron-3-Nano Omni 30B Reasoning
  *   - PDFs via unpdf
  *   - text-like files (txt / md / csv / json / source code) via UTF-8 decode
  */
