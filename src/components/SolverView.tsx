@@ -25,6 +25,7 @@ import {
 import type {
   EducationResponse,
   ModelChoice,
+  PracticeItem,
   UploadedAsset,
 } from "@/types/education";
 import { Composer } from "@/components/Composer";
@@ -608,19 +609,7 @@ function SolverResult({
         )}
 
         {result?.quiz && result.quiz.length > 0 && (
-          <section className="result-section">
-            <h2 className="section-heading">Quick quiz</h2>
-            <ol className="quiz-list">
-              {result.quiz.map((q, i) => (
-                <QuizItem
-                  key={i}
-                  question={q.question}
-                  answer={q.answer}
-                  choices={q.choices}
-                />
-              ))}
-            </ol>
-          </section>
+          <QuizSection items={result.quiz} />
         )}
       </div>
 
@@ -957,16 +946,80 @@ function ThinkingProcess() {
   );
 }
 
+/**
+ * Paginated wrapper around `QuizItem`. Mirrors gpai.app's right-rail
+ * "1 / 3" pager: renders one question at a time with `‹` / `›` controls
+ * and a numeric counter. Resets the visible index back to 0 when the
+ * underlying item set shrinks (e.g. user regenerates a smaller batch).
+ */
+function QuizSection({ items }: { items: PracticeItem[] }) {
+  const [index, setIndex] = useState(0);
+  // Clamp index when items change beneath us (e.g. shorter regen).
+  const safeIndex = Math.min(index, items.length - 1);
+  const current = items[safeIndex];
+  const last = items.length - 1;
+
+  return (
+    <section className="result-section">
+      <header className="quiz-section-head">
+        <h2 className="section-heading">Quick quiz</h2>
+        <div className="quiz-pager" role="group" aria-label="Quiz pagination">
+          <button
+            type="button"
+            className="quiz-pager-btn"
+            onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            disabled={safeIndex === 0}
+            aria-label="Previous question"
+          >
+            ‹
+          </button>
+          <span className="quiz-pager-count" aria-live="polite">
+            {safeIndex + 1} / {items.length}
+          </span>
+          <button
+            type="button"
+            className="quiz-pager-btn"
+            onClick={() => setIndex((i) => Math.min(last, i + 1))}
+            disabled={safeIndex >= last}
+            aria-label="Next question"
+          >
+            ›
+          </button>
+        </div>
+      </header>
+      <ol className="quiz-list" start={safeIndex + 1}>
+        <QuizItem
+          // Re-mounting on index change discards the per-item local
+          // state (selected option, hint open) so paging back to a
+          // previously-answered question gives a clean attempt — matches
+          // upstream's behaviour and avoids stale-state confusion.
+          key={safeIndex}
+          question={current.question}
+          answer={current.answer}
+          choices={current.choices}
+          explanation={current.explanation}
+          hint={current.hint}
+        />
+      </ol>
+    </section>
+  );
+}
+
 function QuizItem({
   question,
   answer,
   choices,
+  explanation,
+  hint,
 }: {
   question: string;
   answer: string;
   choices?: string[];
+  explanation?: string;
+  hint?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [hintOpen, setHintOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const isMcq = Array.isArray(choices) && choices.length >= 3;
 
@@ -1003,18 +1056,41 @@ function QuizItem({
                   <span className="quiz-choice-text">
                     <MathMarkdown content={c} />
                   </span>
+                  {submitted && isCorrect && (
+                    <CheckCircle2
+                      size={14}
+                      className="quiz-choice-mark quiz-choice-mark-correct"
+                      aria-hidden
+                    />
+                  )}
+                  {submitted && isPicked && !isCorrect && (
+                    <XCircle
+                      size={14}
+                      className="quiz-choice-mark quiz-choice-mark-wrong"
+                      aria-hidden
+                    />
+                  )}
                 </button>
               </li>
             );
           })}
         </ul>
+        <QuizHintRow
+          hint={hint}
+          hintOpen={hintOpen}
+          onToggleHint={() => setHintOpen((p) => !p)}
+          submitted={submitted}
+        />
         {submitted && (
           <div className="quiz-feedback">
             {selected === answer ? (
-              <span className="quiz-feedback-correct">Correct.</span>
+              <span className="quiz-feedback-correct">
+                <CheckCircle2 size={14} aria-hidden /> Correct.
+              </span>
             ) : (
               <span className="quiz-feedback-wrong">
-                Not quite. Correct answer: <strong>{answer}</strong>
+                <XCircle size={14} aria-hidden /> Not quite. Correct answer:{" "}
+                <strong>{answer}</strong>
               </span>
             )}
             <button
@@ -1024,6 +1100,12 @@ function QuizItem({
             >
               Try again
             </button>
+          </div>
+        )}
+        {submitted && explanation && (
+          <div className="quiz-explanation" role="note">
+            <span className="quiz-explanation-label">Explanation</span>
+            <MathMarkdown content={explanation} />
           </div>
         )}
       </li>
@@ -1043,11 +1125,57 @@ function QuizItem({
         </button>
         <MathMarkdown content={question} />
       </div>
+      <QuizHintRow
+        hint={hint}
+        hintOpen={hintOpen}
+        onToggleHint={() => setHintOpen((p) => !p)}
+        submitted={open}
+      />
       {open && (
         <div className="quiz-answer">
           <MathMarkdown content={answer} />
+          {explanation && (
+            <div className="quiz-explanation" role="note">
+              <span className="quiz-explanation-label">Why</span>
+              <MathMarkdown content={explanation} />
+            </div>
+          )}
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * Optional "Hint" pill rendered inside each `QuizItem`. We hide the row
+ * entirely when the question has no hint AND when the user has already
+ * submitted (so the hint doesn't compete with the green/red feedback
+ * row for attention).
+ */
+function QuizHintRow({
+  hint,
+  hintOpen,
+  onToggleHint,
+  submitted,
+}: {
+  hint?: string;
+  hintOpen: boolean;
+  onToggleHint: () => void;
+  submitted: boolean;
+}) {
+  if (!hint) return null;
+  if (submitted) return null;
+  return (
+    <div className="quiz-hint-row">
+      <button
+        type="button"
+        className={`quiz-hint-btn ${hintOpen ? "is-open" : ""}`}
+        onClick={onToggleHint}
+        aria-expanded={hintOpen}
+      >
+        <Lightbulb size={12} aria-hidden /> {hintOpen ? "Hide hint" : "Hint"}
+      </button>
+      {hintOpen && <p className="quiz-hint-text">{hint}</p>}
+    </div>
   );
 }

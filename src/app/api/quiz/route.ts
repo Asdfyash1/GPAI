@@ -63,12 +63,16 @@ export async function POST(request: Request): Promise<Response> {
   const system =
     "You are a STEM teacher who writes short, focused review quizzes. " +
     "Output ONLY valid JSON in this exact shape: " +
-    '{"quiz":[{"question":"...","answer":"...","choices":["A","B","C","D"]}]}. ' +
-    "The `choices` field is OPTIONAL per item: include it for multiple-choice questions, omit it for short-answer questions. " +
+    '{"quiz":[{"question":"...","answer":"...","choices":["A","B","C","D"],"explanation":"...","hint":"..."}]}. ' +
+    "Per-item field rules:\n" +
+    "- `question` and `answer` are REQUIRED.\n" +
+    "- `choices` is OPTIONAL: include a 4-option array for multiple-choice questions; omit for short-answer.\n" +
+    "- `explanation` is REQUIRED: one short sentence (≤25 words) explaining WHY the correct answer is right. Plain text — no markdown, no LaTeX `\\\\(...\\\\)`, no `$$`.\n" +
+    "- `hint` is REQUIRED: one terse nudge (≤15 words) that points the student toward the right concept WITHOUT revealing the answer. Plain text.\n" +
     "Each question must be directly related to the user's problem and grounded in the reference solution if provided. " +
     "Mix concept recall, formula application, and short calculation. " +
     formatRule +
-    " Do NOT include explanations or any text outside the JSON object.";
+    " Do NOT include any text outside the JSON object — no markdown fences, no preamble, no commentary.";
 
   const userPrompt = [
     `Problem:\n${prompt}`,
@@ -85,7 +89,11 @@ export async function POST(request: Request): Promise<Response> {
       system,
       prompt: userPrompt,
       temperature: 0.5,
-      maxOutputTokens: 1200,
+      // Doubled from 1200 → 2400 to handle 5–8 questions × (question +
+      // 4 choices + answer + explanation + hint) without truncation.
+      // Truncation was the user-visible failure mode reported on
+      // 2026-05-02 ("Could not parse quiz JSON. Got: …{question:…answ").
+      maxOutputTokens: 2400,
     });
     raw = result.text;
   } catch (error) {
@@ -110,15 +118,25 @@ export async function POST(request: Request): Promise<Response> {
       question?: unknown;
       answer?: unknown;
       choices?: unknown;
+      explanation?: unknown;
+      hint?: unknown;
     }>;
   };
   try {
     parsed = JSON.parse(jsonText);
   } catch {
-    return Response.json(
-      { error: `Could not parse quiz JSON. Got: ${raw.slice(0, 200)}` },
-      { status: 502 },
-    );
+    // Truncated output is the most common parse failure (the model hits
+    // its token cap mid-string). Recover by scanning for completed
+    // `{...}` item objects inside the `"quiz":[...]` array — anything
+    // ending in a clean `}` that we can JSON.parse on its own counts.
+    const recovered = recoverTruncatedQuizItems(jsonText);
+    if (recovered.length === 0) {
+      return Response.json(
+        { error: `Could not parse quiz JSON. Got: ${raw.slice(0, 200)}` },
+        { status: 502 },
+      );
+    }
+    parsed = { quiz: recovered };
   }
   const quiz: PracticeItem[] = (parsed.quiz ?? [])
     .map((q) => {
@@ -138,9 +156,20 @@ export async function POST(request: Request): Promise<Response> {
         choices && choices.length >= 3 && choices.includes(answer)
           ? choices
           : undefined;
-      return validChoices
+      const explanation =
+        typeof q.explanation === "string" && q.explanation.trim()
+          ? q.explanation.trim()
+          : undefined;
+      const hint =
+        typeof q.hint === "string" && q.hint.trim()
+          ? q.hint.trim()
+          : undefined;
+      const base: PracticeItem = validChoices
         ? { question, answer, choices: validChoices }
         : { question, answer };
+      if (explanation) base.explanation = explanation;
+      if (hint) base.hint = hint;
+      return base;
     })
     .filter((q) => q.question && q.answer)
     .slice(0, count);
@@ -157,4 +186,90 @@ export async function POST(request: Request): Promise<Response> {
     model: `${provider.name}:${modelName}`,
   };
   return Response.json(payload);
+}
+
+/**
+ * Recover quiz items from a truncated JSON string.
+ *
+ * The model hit its token cap mid-string, so the literal payload looks
+ * like:
+ *
+ *   {"quiz":[{"question":"…","answer":"…","choices":[…]},
+ *            {"question":"…","answer":"…","choices":[…]},
+ *            {"question":"What is the order of the …","answer":"3",…
+ *
+ * — a valid array open, two complete items, then a third item that's
+ * partially serialised. We can still salvage the two complete items
+ * by scanning forward through the array, tracking brace depth, and
+ * collecting every range that starts at `{` and closes at the matching
+ * `}` (depth back to 0). Each such range is fed to JSON.parse
+ * individually; anything that fails to parse is silently dropped.
+ *
+ * This is intentionally simple — full streaming-JSON parsers exist
+ * (clarinet, jsonparse, etc.) but they all bring a dep just to recover
+ * from a 1-in-N tail truncation.
+ */
+function recoverTruncatedQuizItems(text: string): Array<{
+  question?: unknown;
+  answer?: unknown;
+  choices?: unknown;
+  explanation?: unknown;
+  hint?: unknown;
+}> {
+  const arrayStart = text.indexOf('"quiz"');
+  const startBracket = arrayStart === -1 ? -1 : text.indexOf("[", arrayStart);
+  if (startBracket === -1) return [];
+
+  const items: unknown[] = [];
+  let depth = 0;
+  let itemStart = -1;
+  let inString = false;
+  let escape = false;
+
+  for (let i = startBracket + 1; i < text.length; i += 1) {
+    const ch = text[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") {
+      if (depth === 0) itemStart = i;
+      depth += 1;
+      continue;
+    }
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0 && itemStart !== -1) {
+        const slice = text.slice(itemStart, i + 1);
+        try {
+          items.push(JSON.parse(slice));
+        } catch {
+          /* skip malformed item */
+        }
+        itemStart = -1;
+      }
+      continue;
+    }
+    if (ch === "]" && depth === 0) break;
+  }
+
+  return items as Array<{
+    question?: unknown;
+    answer?: unknown;
+    choices?: unknown;
+    explanation?: unknown;
+    hint?: unknown;
+  }>;
 }

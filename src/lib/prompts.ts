@@ -15,7 +15,10 @@ Non-negotiable output principles:
 7. Under "Common mistakes", list 2-4 specific traps for THIS problem (sign errors, unit slips, misread givens, etc.) \u2014 not generic advice.
 8. Under "Key concepts", list 3-5 concise bullets naming the underlying laws/identities used.
 9. Under "Follow-up questions", give 2-3 short questions that extend understanding.
-10. Under "Quiz", give 1-2 multiple-choice or short-answer items WITH the correct answer hidden inline like '(Answer: ...)'.
+10. Under "Quiz", give 1-2 short review items in this EXACT two-line shape so the UI can hide the answer behind a reveal toggle:
+    Q: <question text>?
+    A: <answer text>
+    Do NOT bake the answer into the question line as "(Answer: …)" or "[Ans: …]". Each Q/A pair must be on its own pair of lines.
 11. Under "Similar practice", give 2-3 fresh problems at the same level (no answers).
 12. If the prompt is genuinely tiny (e.g. "What is 2+2?"), keep every section tight \u2014 do NOT pad. Quality over length.
 13. If a required value is missing, state the assumption clearly in "Problem" and proceed.
