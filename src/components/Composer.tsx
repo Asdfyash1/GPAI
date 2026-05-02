@@ -3,6 +3,7 @@
 import {
   ArrowUp,
   Globe,
+  Loader2,
   Mic,
   Paperclip,
   Sparkles,
@@ -19,6 +20,12 @@ import {
 } from "react";
 import type { ModelChoice, UploadedAsset } from "@/types/education";
 import { ModelAvatars } from "@/components/ModelAvatars";
+import {
+  extractPdfTextClient,
+  extractTextFileClient,
+  isPdfFile,
+  isTextLikeFile,
+} from "@/lib/client-extract";
 
 type ModelOption = {
   id: ModelChoice;
@@ -114,38 +121,101 @@ export function Composer(props: ComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  // Tracks how many file picks are still being parsed so the user sees
+  // a spinner instead of staring at a frozen attach button while a
+  // multi-MB PDF is being decoded in the browser.
+  const [parsingCount, setParsingCount] = useState(0);
+  const [pickError, setPickError] = useState<string | null>(null);
   const currentModel = modelOptions.find((m) => m.id === props.modelChoice);
 
   const onPickFiles = useCallback(
     async (files: FileList | File[] | null) => {
       if (!files) return;
       const list = Array.from(files);
+      if (list.length === 0) return;
+      setPickError(null);
+      setParsingCount((c) => c + list.length);
       const next: UploadedAsset[] = [];
+      const errors: string[] = [];
       for (const file of list) {
-        // Compress large images client-side so we never blow past Vercel's
-        // 4.5 MB request body limit and so the vision API responds in <30s.
-        // PDFs and text files are passed through untouched.
-        let payload: { dataUrl: string; size: number; type: string } = {
-          dataUrl: await readAsDataUrl(file),
-          size: file.size,
-          type: file.type,
-        };
-        if (file.type.startsWith("image/")) {
-          try {
-            payload = await compressImageIfLarge(file, payload.dataUrl);
-          } catch {
-            // fall through with the original dataUrl if anything goes wrong
+        try {
+          // Images: keep the data URL — the vision model needs the raw
+          // bytes server-side. We compress client-side to stay under
+          // Vercel's 4.5 MB request limit.
+          if (file.type.startsWith("image/")) {
+            let payload: { dataUrl: string; size: number; type: string } = {
+              dataUrl: await readAsDataUrl(file),
+              size: file.size,
+              type: file.type,
+            };
+            try {
+              payload = await compressImageIfLarge(file, payload.dataUrl);
+            } catch {
+              /* fall through with the original dataUrl if anything goes wrong */
+            }
+            next.push({
+              name: file.name,
+              type: payload.type,
+              size: payload.size,
+              dataUrl: payload.dataUrl,
+              preview: payload.dataUrl,
+            });
+            continue;
           }
+
+          // PDFs: extract text in the browser and ship just the text.
+          // This keeps multi-MB PDFs (well past Vercel's 4.5 MB body
+          // limit) usable inside Solver / Chat / Cheatsheet.
+          if (isPdfFile(file)) {
+            const { text } = await extractPdfTextClient(file);
+            next.push({
+              name: file.name,
+              type: "application/pdf",
+              size: file.size,
+              extractedText:
+                text ||
+                `[PDF "${file.name}" had no extractable text — likely a scanned image. Re-upload as a PNG/JPG screenshot for vision OCR.]`,
+            });
+            continue;
+          }
+
+          // Text-likes (md / json / source code …): same idea — decode
+          // client-side and ship plain UTF-8.
+          if (isTextLikeFile(file)) {
+            const text = await extractTextFileClient(file);
+            next.push({
+              name: file.name,
+              type: file.type || "text/plain",
+              size: file.size,
+              extractedText: text,
+            });
+            continue;
+          }
+
+          // Unknown file type — last-resort dataUrl path. The user will
+          // get a clearer "cannot read this file" error than
+          // FUNCTION_PAYLOAD_TOO_LARGE.
+          const dataUrl = await readAsDataUrl(file);
+          next.push({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            dataUrl,
+          });
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : "could not read file";
+          errors.push(`"${file.name}": ${message}`);
+        } finally {
+          setParsingCount((c) => Math.max(0, c - 1));
         }
-        next.push({
-          name: file.name,
-          type: payload.type,
-          size: payload.size,
-          dataUrl: payload.dataUrl,
-          preview: payload.type.startsWith("image/") ? payload.dataUrl : undefined,
-        });
       }
-      props.onAttachmentsChange([...props.attachments, ...next]);
+      if (next.length > 0) {
+        props.onAttachmentsChange([...props.attachments, ...next]);
+      }
+      if (errors.length > 0) {
+        setPickError(errors.join("; "));
+      }
     },
     [props],
   );
@@ -180,7 +250,7 @@ export function Composer(props: ComposerProps) {
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
-      {props.attachments.length > 0 && (
+      {(props.attachments.length > 0 || parsingCount > 0) && (
         <div className="attachment-row">
           {props.attachments.map((a, i) => (
             <div key={`${a.name}-${i}`} className="attachment-chip">
@@ -205,7 +275,20 @@ export function Composer(props: ComposerProps) {
               </button>
             </div>
           ))}
+          {parsingCount > 0 && (
+            <div className="attachment-chip is-parsing" aria-live="polite">
+              <Loader2 size={14} className="spin" />
+              <span className="attachment-name">
+                Reading {parsingCount} file{parsingCount === 1 ? "" : "s"}…
+              </span>
+            </div>
+          )}
         </div>
+      )}
+      {pickError && (
+        <p className="composer-pick-error" role="alert">
+          {pickError}
+        </p>
       )}
       <textarea
         className="composer-textarea"
@@ -392,7 +475,10 @@ export function Composer(props: ComposerProps) {
               className="send-button"
               onClick={props.onSubmit}
               aria-label="Submit"
-              disabled={!props.value.trim() && props.attachments.length === 0}
+              disabled={
+                parsingCount > 0 ||
+                (!props.value.trim() && props.attachments.length === 0)
+              }
             >
               <ArrowUp size={16} />
             </button>
