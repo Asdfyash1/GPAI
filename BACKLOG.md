@@ -188,7 +188,14 @@ After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="crea
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: auto-titled tasks (Tier A #1):** _new PR after #35 audit merged._
+- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: cross-check indicator on model selector (Tier A #8):** _new PR._
+  - **What:** gpai.app shows a "Cross-check with [icons]" subhead under GPAI Pro in the model selector, indicating multi-model verification. Forge had no equivalent — users couldn't see *why* "Auto" was different from "Llama 3.3 70B" or whether cross-check was actually wired to the selected model.
+  - **How:** `src/components/Composer.tsx` — extended `modelOptions` with `description`, `crossCheckPartner`, and `group` fields. Added two surface-level indicators: (1) an inline pill `✦ Cross-check with <verifier>` next to the model select button (renders only when `crossCheck` is on AND `currentModel.crossCheckPartner` is set; hidden < 760 px); (2) the dropdown menu now renders option descriptions, a `Cross-check with <verifier>` subhead per primary option, and is grouped into "Forge models / Third-party model / Offline" sections with a divider between groups. Active option prefixed with `✓` and `aria-checked="true"`.
+  - **CSS:** added `.model-option-group`, `.model-option-group-label`, `.model-option-row`, `.model-option-label`, `.model-option-description`, `.model-option-crosscheck`, `.model-crosscheck-indicator` to `src/app/globals.css`. Dropdown widened from 180 px → 280 px min, 340 px max.
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean.
+  - **What's next:** when Tier A #2 (CrossCheckBadge avatar polish) lands, the inline pill could swap to a small avatar pair to match gpai.app's exact visual; for now the pill is text-only.
+
+- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: auto-titled tasks (Tier A #1):** _PR #36, merged._
   - **What:** Forge's sidebar Recent showed timestamp IDs / 60-char prompt slices. gpai.app shows a 2-5 word semantic title (e.g. "Solving 4th-order ODE", "Quadratic factoring") within ~1 s of submit. Closes Tier A gap #1 from the 2026-05-02 audit.
   - **How:** new `generateTaskTitle(request, primaryAnswerText)` in `src/lib/orchestrator.ts` — small post-stream LLM call (24-token cap, 15 s abort) that returns a cleaned 2-5 word title. `parseModelResponse(markdown, request, verification, options?)` now accepts an optional `titleOverride`. Wired into `runEducationalOrchestrator` (sequential, awaits before parse) and `/api/educate/stream/route.ts` (parallel with `runCrossCheckOnAnswer` via `Promise.all` so the user-visible TTFT is unchanged — only the structured tail waits).
   - **Skipped for `chat` mode** because `EducationApp.handleChatMessagesChange` already titles chats from the first user message — adding an LLM call there would just duplicate work and cost a request.
@@ -363,9 +370,17 @@ Effort scale: XS = <½ day · S = ½–1 day · M = 1–2 days · L = 2–5 days
    Custom Instructions (10 000 chars) text fields. Inject into Solver / AI
    Chat system prompts. Persist to localStorage (or to user account if we
    ever add real auth).
-8. **`Cross-check with [model icons]` indicator** on the model selector *(XS)* —
-   Subhead under "GPAI Pro" showing the verifier model's icon, just like
-   gpai.app. Pure UI.
+8. ~~**`Cross-check with [model icons]` indicator** on the model selector *(XS)*~~ —
+   **DONE** (2026-05-02). Two indicators added to `Composer.tsx`:
+   (a) inline pill `✦ Cross-check with Nemotron 49B` (orange, low-opacity
+   bg) sits between the Cross-check checkbox and the model select button —
+   only renders when cross-check is on AND the selected model has a
+   `crossCheckPartner`. Hidden on viewports <760 px to avoid crowding.
+   (b) Inside the dropdown, every primary model option now shows a
+   description subhead + a `✦ Cross-check with <verifier>` line, plus
+   the dropdown is grouped (Forge models / Third-party model / Offline)
+   to mirror gpai.app's GPAI Pro / GPAI Fast / Third-party model layout.
+   Selected option is prefixed with `✓`. Active-state aria added.
 
 #### Tier B — high-impact, larger effort (ship after Tier A)
 
