@@ -188,6 +188,14 @@ After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="crea
 
 ## Changelog (append-only — every session adds an entry)
 
+- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: Follow-up chips icons + verbose pre-canned prompts + Copy button (Tier A #5):** _PR #40._
+  - **What:** the four follow-up chips on the Solver right-rail were already wired to `/api/chat`, but they (a) had no icons, (b) sent the chip label literally as the user message (which is too short to be useful out of context), and (c) had no Copy affordance on the AI reply. Closes the last "polish" gap on Follow-up chips.
+  - **How (`src/components/SolverView.tsx`):** replaced `QUICK_CHIPS` (string[]) with a typed object array carrying `label` (chip text), `icon` (lucide-react name), and `userPrompt` (verbose pre-canned message). The chip click handler now calls `sendFollowUp(chip.userPrompt)` so the long form is what lands in the thread (and on the wire). Added an `iconForChip()` helper that maps the icon name to a lucide component (`Lightbulb` / `ListChecks` / `Target` / `Languages`). Added a `FollowUpCopyButton` that renders below each completed AI reply with a `Copy` → `Copied ✓` flip on click (1.4 s timeout). `sendFollowUp` now also forwards `personalization.request` to `/api/chat` so Settings → Personalize values are honoured on follow-ups too.
+  - **Why a verbose `userPrompt`:** the audit (`research/audit-2026-05-02/findings.md` §2.4) confirms gpai.app does the same: clicking "Make it easy" displays the user message **"Explain this in a way that's easy to understand."** in the thread — not the literal chip label. A short label out of context confuses the model; the verbose form is self-explanatory.
+  - **CSS (`src/app/globals.css`):** new `.chip-with-icon` (icon-aware spacing + colour rules) and `.followup-copy-btn` / `.followup-copy-btn.is-copied` (small pill, accent ring on copy). Reuses existing `.followup-thread` / `.followup-a` containers; no layout regression.
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean (Next.js 16.2.4 / Turbopack).
+  - **Tier A status:** with PR #40 merged, the only remaining Tier A item is **#3 (inline orange glossary terms)** — the largest of the tier and intended to ship last.
+
 - **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: Try-demo carousel + Settings → Personalize tab (Tier A #6 + #7):** _PR #39._
   - **What:** Two upstream parities at once. (1) gpai.app's Solver landing rotates demo cards rather than showing 3 static ones — Forge had a fixed grid. (2) gpai.app exposes Settings → Personalize with Occupation + Custom Instructions free-text, injected into every reply — Forge had no settings panel at all.
   - **Carousel (`src/components/SolverView.tsx`):** expanded `QUICK_DEMOS` from 3 → 6 entries (added "Verify a step", "Quick concept refresher", "Translate a textbook problem"), turned `DemoCards` into a stateful component that advances `start` by 1 every `DEMO_ROTATION_MS` (7 s), wraps via modulo, and slices `DEMO_CARDS_PER_PAGE` (3) visible items. Hover/focus pauses rotation; dot pagination above the grid is keyboard-accessible (`role="tab"`, `aria-selected`). Each rotation triggers a `demo-card-fade-in` keyframe (320 ms) gated by `prefers-reduced-motion: reduce`.
@@ -383,10 +391,21 @@ Effort scale: XS = <½ day · S = ½–1 day · M = 1–2 days · L = 2–5 days
 4. **Functional Quiz panel** *(S)* — Already partially wired (`POST /api/quiz`).
    Match upstream UX: pagination `1/3` with `<` `>`, MCQ with green ✓ / red ✗
    on click, auto-show Explanation block, Hint button per question.
-5. **Functional Follow-up chips** *(S)* — Wire the four chips ("Make it easy",
-   "List key concepts", "Give similar practice", "Explain in English") to fire
-   pre-canned prompts to `/api/chat` with the current Solver problem + answer
-   as system context. Render the response as a chat thread on the right rail.
+5. ~~**Functional Follow-up chips** *(S)*~~ — **DONE (2026-05-02, PR #40)**.
+   The chips were already wired to `/api/chat` with primer context, but
+   matched gpai.app only superficially. PR #40 closes the remaining UX
+   gap: each chip now ships an **icon** (lightbulb / list-checks / target /
+   languages, lucide-react) plus a **verbose pre-canned `userPrompt`**
+   that is sent to `/api/chat` as the user message (instead of the chip
+   label literally — e.g. "Make it easy" sends "Explain this in a way
+   that's easy to understand. Use plain language and short bullet
+   steps; assume I'm seeing this idea for the first time."). Each
+   completed AI reply gets a **Copy button** at its bottom-left
+   (`FollowUpCopyButton`, briefly turns into "Copied" with a check).
+   `sendFollowUp` now also forwards `personalization.request` so any
+   Settings → Personalize values land on follow-ups too. Full chip
+   definition is hover-tooltipped via `title={chip.userPrompt}` so
+   power-users can see the full primer before clicking.
 6. ~~**Try-demo carousel cards** on Solver landing *(XS)*~~ — **DONE
    (2026-05-02)**. PR #39 expanded `QUICK_DEMOS` from 3 → 6 cards (added
    "Verify a step", "Quick concept refresher", "Translate a textbook
@@ -635,14 +654,10 @@ gap closes cleanly.
 - **PR 3: Quiz panel functional** (Tier A #4, S) — Pagination, MCQ feedback
   (green ✓ / red ✗ on click), auto-show Explanation, Hint button. The
   `/api/quiz` endpoint and component already exist; this is UX polish.
-- **PR 4: Follow-up chips functional** (Tier A #5, S) — Wire the four chips
-  to fire pre-canned prompts to `/api/chat` with task context. Render
-  response as a chat thread on the right rail.
+- ✅ **PR 4: Follow-up chips functional** (Tier A #5, S) — **MERGED in
+  PR #40**.
 - ✅ **PR 5: Try-demo carousel + Personalize tab** (Tier A #6 + #7, S) —
-  **OPEN AS PR #39**. Carousel rotates 6 demo cards (3 visible at a time);
-  Settings modal with Personalize tab (Occupation + Custom Instructions),
-  values persist to localStorage and are injected into every Solver/Chat
-  system prompt. Once merged, both Tier A #6 and #7 are done.
+  **MERGED in PR #39**.
 - ✅ **PR 6: Cross-check indicator on model selector** (Tier A #8, XS) —
   **MERGED in PR #37**.
 - **PR 7: Inline orange glossary terms** (Tier A #3, M) — Post-process

@@ -13,9 +13,13 @@ import {
   Eye,
   EyeOff,
   Image as ImageIcon,
+  Languages,
+  Lightbulb,
   Link as LinkIcon,
+  ListChecks,
   MessageCircle,
   Sparkles,
+  Target,
   User,
 } from "lucide-react";
 import type {
@@ -78,12 +82,89 @@ const QUICK_DEMOS = [
 const DEMO_CARDS_PER_PAGE = 3;
 const DEMO_ROTATION_MS = 7_000;
 
-const QUICK_CHIPS = [
-  "Make it easy",
-  "List key concepts",
-  "Give similar practice",
-  "Explain in English",
+/**
+ * The four follow-up chips on the right rail. Each chip has:
+ * - `label`: short text shown on the chip itself.
+ * - `icon`: lucide-react icon identifier (rendered via the {@link iconForChip}
+ *   helper to keep this list serialisable / inspectable).
+ * - `userPrompt`: the verbose pre-canned **user message** that is actually
+ *   sent to `/api/chat` when the chip is clicked. We deliberately avoid
+ *   sending the short label as the user message because the model otherwise
+ *   has no idea what "Make it easy" refers to without the surrounding
+ *   solver context — gpai.app does the same.
+ */
+const QUICK_CHIPS: ReadonlyArray<{
+  label: string;
+  icon: "Lightbulb" | "ListChecks" | "Target" | "Languages";
+  userPrompt: string;
+}> = [
+  {
+    label: "Make it easy",
+    icon: "Lightbulb",
+    userPrompt:
+      "Explain this in a way that's easy to understand. Use plain language and short bullet steps; assume I'm seeing this idea for the first time.",
+  },
+  {
+    label: "List key concepts",
+    icon: "ListChecks",
+    userPrompt:
+      "List the key concepts, formulas, and definitions used in the reference solution. Group them with short H3 headings and one-line explanations — I want a study glossary.",
+  },
+  {
+    label: "Give similar practice",
+    icon: "Target",
+    userPrompt:
+      "Give me one similar but distinct practice problem at the same difficulty level. Show only the question — no answer or solution — so I can attempt it myself.",
+  },
+  {
+    label: "Explain in English",
+    icon: "Languages",
+    userPrompt:
+      "Re-explain the solution in clear, conversational English. Translate any non-English text in the original problem and walk through each step with short sentences.",
+  },
 ];
+
+function iconForChip(name: (typeof QUICK_CHIPS)[number]["icon"]) {
+  switch (name) {
+    case "Lightbulb":
+      return <Lightbulb size={12} />;
+    case "ListChecks":
+      return <ListChecks size={12} />;
+    case "Target":
+      return <Target size={12} />;
+    case "Languages":
+      return <Languages size={12} />;
+  }
+}
+
+/**
+ * Tiny `Copy` button at the bottom of each follow-up AI reply. Briefly
+ * shows a check + `Copied` after the user clicks. Mirrors the existing
+ * Solver action-row Copy button visually but in a smaller form factor
+ * suitable for a chat thread.
+ */
+function FollowUpCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`followup-copy-btn ${copied ? "is-copied" : ""}`}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1400);
+        } catch {
+          /* ignore — fall back to manual selection */
+        }
+      }}
+      title="Copy reply"
+    >
+      {copied ? <Check size={11} /> : <Copy size={11} />}
+      <span>{copied ? "Copied" : "Copy"}</span>
+    </button>
+  );
+}
 
 export function SolverView(props: SolverViewProps) {
   const [crossCheck, setCrossCheck] = useState(true);
@@ -287,6 +368,7 @@ function SolverResult({
   const [quizFormat, setQuizFormat] = useState<"mixed" | "mcq" | "short">(
     "mixed",
   );
+  const personalization = usePersonalization();
   // In-context follow-up thread anchored to this solve. Each entry is a
   // Q/A pair; the answer streams in chunk-by-chunk into `a`.
   type ThreadTurn = {
@@ -341,6 +423,7 @@ function SolverResult({
           modelChoice,
           deepExplain: false,
           webEnabled: false,
+          personalization: personalization.request,
         }),
       });
       if (!res.ok || !res.body) {
@@ -568,13 +651,15 @@ function SolverResult({
             <div className="chip-grid">
               {QUICK_CHIPS.map((chip) => (
                 <button
-                  key={chip}
+                  key={chip.label}
                   type="button"
-                  className="chip"
-                  onClick={() => sendFollowUp(chip)}
+                  className="chip chip-with-icon"
+                  onClick={() => sendFollowUp(chip.userPrompt)}
                   disabled={!result || isFollowUpInFlight}
+                  title={chip.userPrompt}
                 >
-                  {chip}
+                  {iconForChip(chip.icon)}
+                  <span>{chip.label}</span>
                 </button>
               ))}
               {result && (
@@ -618,6 +703,9 @@ function SolverResult({
                       ) : null}
                       {t.error && (
                         <p className="error-text">{t.error}</p>
+                      )}
+                      {t.a && !t.isStreaming && (
+                        <FollowUpCopyButton text={t.a} />
                       )}
                     </div>
                   </li>

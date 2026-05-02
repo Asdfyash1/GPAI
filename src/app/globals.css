@@ -2983,3 +2983,44 @@ a {
     border-bottom: 1px solid var(--line);
   }
 }
+
+/* ===========  FOLLOW-UP CHIPS WITH ICONS + COPY BUTTON ============ */
+
+.chip-with-icon {
+  gap: 6px;
+}
+
+.chip-with-icon svg {
+  flex-shrink: 0;
+  color: var(--ink-muted);
+}
+
+.chip-with-icon:hover:not(:disabled) svg {
+  color: var(--accent);
+}
+
+.followup-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.followup-copy-btn:hover {
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.followup-copy-btn.is-copied {
+  color: var(--accent);
+  border-color: var(--accent);
+}
