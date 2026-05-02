@@ -2,10 +2,19 @@
 
 > **Purpose:** This document is the single source of truth for how the upstream
 > [gpai.app](https://gpai.app) behaves so future Devin sessions can skip the
-> manual walkthrough. Captured from a live signed-in account on 2026-04-30.
-> Every feature in our clone (`Asdfyash1/GPAI`) should be measured against this
-> reference. **Update this file** whenever upstream UX changes or you find
-> something that's not documented here.
+> manual walkthrough. Captured from a live signed-in account on 2026-04-30 and
+> deeply re-audited on 2026-05-02. Every feature in our clone (`Asdfyash1/GPAI`)
+> should be measured against this reference. **Update this file** whenever
+> upstream UX changes or you find something that's not documented here.
+
+> **2026-05-02 deep audit:** A second full pass was done on a logged-in account
+> (`sqdmv50703@minitts.net`). The audit captured every feature's actual rendered
+> output, model selectors, export modals, share popups, follow-up chip behavior,
+> and 46 fresh screenshots in `research/screenshots/audit-2026-05-02/`. Findings
+> are written up in [`research/audit-2026-05-02/findings.md`](audit-2026-05-02/findings.md).
+> **Read that file FIRST** when starting any gap-closure work — it documents
+> patterns this file does not yet cover (specialized Visualizer agents, Quiz
+> sub-types, Cross-checked badge, inline orange glossary terms, etc.).
 
 > **How to use this file:**
 > 1. Pick a feature you're working on (Solver / Visualizer / Chat / Cheatsheet
@@ -467,4 +476,143 @@ Both scripts read `NVIDIA_API_KEY` from `process.env` (NOT from `.env.local`), s
 - **Scanned PDFs.** Add a server-side rasteriser path (poppler `pdftoppm` or pdf.js NodeCanvasFactory) so `extractPdfText` can fall back to per-page Nemotron OCR when `unpdf` returns empty text. Today, scanned PDFs fail with a "re-upload as image" message.
 - **NVCF Assets API for big images.** If we ever want to send uncompressed photos directly (no Composer compression), switch from inline `image_url` to the [NVCF Assets API](https://docs.api.nvidia.com/cloud-functions/reference/createasset) — upload the image once, reference it by asset ID in the chat call. Removes the 1.7 MB cap. Not currently needed because Composer compression keeps payloads tiny.
 - **Streaming OCR.** The Nemotron Omni call supports `stream: true`. We don't use it because the typical OCR response is <100 chars and arrives in <2 s. If we ever switch to longer multi-page transcriptions, streaming becomes worth wiring up so the orchestrator can start its solver pass before OCR fully finishes.
+
+
+---
+
+## 13. New findings from 2026-05-02 deep audit (additions)
+
+The 2026-04-30 reference above missed a number of features. The 2026-05-02 audit
+captured them; the full write-up is in
+[`research/audit-2026-05-02/findings.md`](audit-2026-05-02/findings.md). High-impact
+additions are summarised here so the reference stays self-contained:
+
+### 13.1 Visualizer has 9 specialized AI agents (not one general image model)
+The Visualizer composer's `Mixture of AI ▼` dropdown reveals nine purpose-built
+agents that gpai.app routes between based on the diagram type:
+
+| Agent | Use case |
+|-------|----------|
+| Mixture of AI *(default)* | Auto-selects optimal agent per prompt |
+| Illustration AI Flash | Educational illustrations / biology / anatomy |
+| Illustration AI Pro (Plus) | Higher-quality illustrations (paid plan) |
+| Graph AI | matplotlib-quality scientific plots, 3D surfaces, NMR spectra |
+| Flowchart AI | Flowcharts, ER diagrams, network topologies |
+| Diagram AI | Geometric / physics diagrams with vector arrows |
+| Circuit AI | Electrical schematics (op-amps, bridges, filters) |
+| Chemistry AI | SVG molecules with stereochemistry |
+| Logic AI | Digital gate diagrams (AND/OR/flip-flops) |
+
+Each agent renders SVG/PNG output styled for its domain. This is a routing
+problem, not a model problem — Forge needs a router that picks the right
+prompt+renderer pipeline per request.
+
+### 13.2 `Cross-checked` badge in Solver Answer
+When `GPAI Pro` is selected, the Answer section shows a **`✓ Cross-checked`**
+badge with two avatar circles (the two models that verified). Tooltip on hover
+reveals the model names. This is a parallel-verifier UX — gpai.app runs a
+second model to verify the first model's answer and shows the user the consensus.
+
+### 13.3 Inline orange clickable glossary terms (cross-feature)
+Used in: Solver, AI Chat artifact, PDF Notes section view, likely Cheatsheet too.
+**Spec:** orange dotted underline on key terms → click reveals an inline tooltip
+with a 1-sentence definition. Glossary is auto-extracted from the response.
+
+### 13.4 Streaming sections in parallel
+Solver streams `Answer` and `Solution` simultaneously (Answer shows a spinner
+while Solution is already rendering below). Sections are NOT serialised behind
+each other. Implies the backend emits a structured event stream
+(`{section: "answer", delta: "..."}`) rather than a single text stream.
+
+### 13.5 Solver Quiz/Follow-up panel — three artifact types
+The Solver right-rail `+ Create new` dropdown contains:
+- **Quiz** — multiple-choice (currently the only one we've seen output)
+- **Flashcards** — front/back card flow
+- **Practice Test (NEW)** — longer assessment
+
+Quiz UX: pagination `1/3` with `<` `>`, MCQ with A/B/C/D, click reveals correct
+answer with green `✓` and wrong answers with red `✗`, auto-shows an
+**Explanation** block. Has a `Hint` button per question.
+
+Follow-up chips fire pre-canned prompts into a chat thread:
+- "Make it easy" → "Explain this in a way that's easy to understand."
+- "List key concepts" → glossary extraction
+- "Give similar practice" → similar-but-distinct problem
+- "Explain in English" → translation/re-rendering
+
+Each chip costs ~5 credits.
+
+### 13.6 Solver Download modal is rich, not a print-to-PDF
+- Multi-problem batch selection (`Select all` toggle)
+- Per-section toggles (Problem Image / Problem Text / Answer / Solution / Solution Images)
+- Layout: each problem on a new page vs. multiple per page
+- Real **DOCX** AND **PDF** export (not browser print)
+
+### 13.7 Public-link share modal
+`Share` icon → "Share solution" popup with:
+- Globe icon + "Public access enabled" (toggleable)
+- Truncated URL `https://gpai.app/solver/share/<id>`
+- `Copy link` button
+This pattern likely repeats across all features.
+
+### 13.8 PDF Notes structure
+- BETA badge + free quota: 2 free PDF Notes/day during beta (separate from credits)
+- Output language dropdown (multilingual)
+- Drop zone: max 100 MB, up to 1500 pages
+- Detail page: thumbnail + auto-classified **`<subject> · <level> · ENGLISH · <pageCount>p`** metadata (gpai auto-tags subject + academic level)
+- Section view: 3-pane (sticky TOC left, dense study notes center, top action bar)
+- TOC is **fully nested** (`3.2.1. Scaled Dot-Product Attention` etc.)
+- Body uses light-tan info-boxes per section, with H2/H3 headings, bulleted points with **bold lead-ins**, inline KaTeX, monospace code blocks, and embedded auto-generated diagrams
+- Per-section **`A-` `A+` `Reset`** font size controls
+- `< Previous / 1/1 / Next >` pagination *within* each section
+- `Send feedback` button (BETA only)
+
+### 13.9 Notebook is a NotebookLM clone with extras
+- Multi-tab UI (`New tab × +` — multiple notebooks open in same window)
+- Multi-chat-per-notebook (`Current chat ▼` dropdown)
+- 3 artifact types: Summary / Quiz / Flashcard, generated from selected sources (`0/20 selected`)
+- 7 source types: Upload / YouTube / Drive / Text + drag-drop PDF/img/doc/audio/video
+- Separate Study Log tab (free-form markdown journal)
+- **Korean placeholder leaked**: Study Log placeholder is "내용을 입력하세요..." → confirms gpai.app is built primarily for Korean users
+
+### 13.10 Cheatsheet has versioning + WYSIWYG editing
+- Multi-version system (Version 1, 2, ... — re-prompts create new versions)
+- 3-column A4 paginated layout (`1 / 2`, zoom controls)
+- Format toolbar: B / I / U / strikethrough / lists / alignment
+- `Edit via chat` toggle (switches between AI-edit and direct WYSIWYG)
+- Density-tuned typography for cheatsheet aesthetic
+
+### 13.11 Report Writer auto-embeds Visualizer diagrams
+The CNN report sample shows an **AI-generated CNN architecture flowchart embedded
+inline in the document**. Report Writer calls into the Visualizer pipeline to
+generate diagrams when the prompt mentions "with a diagram" or similar.
+
+### 13.12 Settings → Personalize (system-prompt extension)
+Two fields:
+- Your occupation (max 200 chars)
+- Custom instructions (max 10,000 chars)
+Used **only** in Solver and AI Chat (per the page subtitle). Not used in the
+other features.
+
+### 13.13 Auto-titled tasks
+Every task is auto-titled by an LLM (Solver: "Ordinary Differential Equation",
+Cheatsheet: "Hibbeler Mechanics Cheatsheet", Report: "Neural Networks Image
+Recognition Report"). The title shows in the sidebar Recent within ~1 second
+of submit.
+
+### 13.14 Model selector
+Three options: GPAI Pro (default, with Cross-check), GPAI Fast, Gemini 3 Flash
+(direct third-party passthrough). The Pro/Fast tier is internal routing; Gemini
+is an explicit model choice.
+
+### 13.15 Sample galleries on every feature landing
+Visualizer, Cheatsheet, Report Writer, PDF Notes, AI Chat all have curated
+sample-output galleries below the composer. Clicking a sample opens a lightbox
+preview with a Download button. Forge has none of these.
+
+### 13.16 Try-demo carousel cards (Solver landing)
+3 rotating example cards under the composer with a one-line title and a
+specific example prompt: "Use it as teaching material — Make a class 11
+physics worksheet on projectile motion", etc. These prefill the composer
+when clicked.
 

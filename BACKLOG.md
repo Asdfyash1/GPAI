@@ -305,3 +305,355 @@ After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="crea
   - **Verified end-to-end:** `npx tsx scripts/test-api.ts /tmp/test-ode-compressed.jpg` against `npm run dev` returned a 4th-order linear ODE solution in 51.8s (vs. previous chemistry hallucination). Lint + typecheck + Next.js build all clean.
   - **Known limitation:** NIM Llama-3.2-11B-Vision is deterministic but inconsistent on subtle handwritten exponents (sometimes reads `D^4` as `D^5`/`D_1`). The chemistry-hallucination root cause is fixed — the answer is now in the right subject area — but for **reliable** handwriting accuracy users should set `GEMINI_API_KEY` (free tier). 90B is more accurate but consistently times out at 40s on NIM's free tier so it sits as a fallback.
   - **Removed leaked NVIDIA key.** Previous session pasted a key in chat — that key is treated as compromised, never committed, and a fresh session-only secret was used for testing.
+
+---
+
+## Feature Audit Findings — 2026-05-02
+
+> A full deep-dive audit of gpai.app was performed on 2026-05-02 (Devin session
+> `1fcd2760b5f2450ab653b9bf5ad563ee`). 46 screenshots + structured findings
+> live in [`research/audit-2026-05-02/`](research/audit-2026-05-02/findings.md).
+> The reference doc was updated as
+> [`research/gpai-features-reference.md` §13](research/gpai-features-reference.md#13-new-findings-from-2026-05-02-deep-audit-additions).
+> **No code was changed in the audit PR.** Each gap below should ship as a
+> separate, focused PR — sized so it can land within one Devin session each.
+
+### Stack-ranked Forge gaps (most-visible first)
+
+Effort scale: XS = <½ day · S = ½–1 day · M = 1–2 days · L = 2–5 days · XL = 5+ days.
+
+#### Tier A — high-impact, low-to-medium effort (ship first)
+
+1. **Auto-titled tasks** *(XS)* — Forge currently shows timestamp IDs in the
+   Recent sidebar. gpai.app shows a 2-4-word LLM-extracted title within ~1s of
+   submit. Add a small follow-up call after the first 200 tokens of the answer
+   that asks `Summarise this problem in ≤5 words for a sidebar entry`. Save to
+   the task store.
+2. **Cross-check `Cross-checked` badge polish** *(S)* — The CrossCheckBadge
+   component already exists. Match upstream visual: two avatar circles + green
+   `✓ Cross-checked` label + tooltip listing the model names. Today our badge
+   has 5 states but the avatar/tooltip detail is missing.
+3. **Inline orange clickable glossary terms** *(M)* — Site-wide pattern.
+   Implementation: post-process the streamed markdown with an LLM glossary pass
+   (`return only an array of {term, definition}`); wrap matches in `<dfn>` with
+   class `glossary-term`; on click, show a small floating tooltip. Apply in
+   Solver, Chat artifact, PDF Notes, Cheatsheet.
+4. **Functional Quiz panel** *(S)* — Already partially wired (`POST /api/quiz`).
+   Match upstream UX: pagination `1/3` with `<` `>`, MCQ with green ✓ / red ✗
+   on click, auto-show Explanation block, Hint button per question.
+5. **Functional Follow-up chips** *(S)* — Wire the four chips ("Make it easy",
+   "List key concepts", "Give similar practice", "Explain in English") to fire
+   pre-canned prompts to `/api/chat` with the current Solver problem + answer
+   as system context. Render the response as a chat thread on the right rail.
+6. **Try-demo carousel cards** on Solver landing *(XS)* — 3 rotating example
+   cards with title + prompt; clicking prefills the composer. Pure UI.
+7. **Settings → Personalize** *(S)* — New tab with Occupation (200 chars) and
+   Custom Instructions (10 000 chars) text fields. Inject into Solver / AI
+   Chat system prompts. Persist to localStorage (or to user account if we
+   ever add real auth).
+8. **`Cross-check with [model icons]` indicator** on the model selector *(XS)* —
+   Subhead under "GPAI Pro" showing the verifier model's icon, just like
+   gpai.app. Pure UI.
+
+#### Tier B — high-impact, larger effort (ship after Tier A)
+
+9. **Streaming sections in parallel** *(M)* — Today our Solver streams a single
+   text blob with H2 sections. gpai.app streams `Answer` + `Solution` in
+   parallel — the Answer shows a spinner while Solution is already rendering
+   below. Refactor `streamEducationalSolverDraft` to emit a structured event
+   stream (`{section, delta}`) and the SolverView to render each section in its
+   own bounded box.
+10. **Solver Download modal** *(M)* — Replace `window.print()` with a real
+    modal: per-section toggles (Problem Image / Problem Text / Answer / Solution
+    / Solution Images) + layout (one-per-page vs many) + DOCX **and** PDF buttons.
+    Use the existing `docx` npm package for DOCX. PDF can stay browser-print
+    for now if generating PDF server-side is too heavy.
+11. **Public-link share** (`/<feature>/share/<id>`) *(M)* — Add a
+    `share_links` server-side store keyed by task ID. Add a "Share" icon next
+    to the task title that generates a short ID, copies the URL, and toggles
+    public-access. The `/share/<id>` route serves a read-only render of the
+    task.
+12. **Quiz / Flashcard / Practice Test** as three artifact types *(M)* — Today
+    Forge only has Quiz. Add Flashcards (front/back card flipping) and Practice
+    Test (longer assessment) artifact types. Each needs its own `/api/<x>`
+    endpoint and renderer.
+13. **Adaptive follow-up suggestion cards in chat replies** *(S)* — When a chat
+    reply finishes, ask the model for 2-3 disambiguation questions ("What
+    aspects are you most interested in?", "What's your comfort level?") and
+    render them as clickable cards under the reply.
+
+#### Tier C — large rebuilds (ship as multi-PR initiatives)
+
+14. **Specialized Visualizer agents** *(XL)* — gpai.app has 9 specialized
+    image agents (Illustration / Graph / Flowchart / Diagram / Circuit /
+    Chemistry / Logic / +Pro variant / Auto-router). Forge today has a single
+    Mermaid render. Build:
+    - A router that classifies the user's prompt into one of N agent buckets.
+    - Per-agent prompt templates (e.g., Graph AI → "Output Python matplotlib
+      code that draws …" then run via Pyodide or a server-side Python sandbox;
+      Chemistry AI → "Output a SMILES string" then render via RDKit-JS;
+      Flowchart AI → Mermaid; Diagram AI → SVG via tikzjax or hand-tuned LLM
+      SVG output; Circuit AI → CircuitJS schematic JSON; etc.).
+    - A unified Visualizer canvas (Figma-lite) that wraps all of them with
+      Edit/Assets tabs, frame size, opacity slider.
+    Recommended phasing: ship Graph AI + Flowchart AI first (highest user
+    value, lowest implementation effort because mermaid + matplotlib already
+    exist). Add the others over time.
+15. **Cheatsheet versioning + 3-column A4 + Edit-via-chat** *(L)* — Replace
+    the current single-blob markdown cheatsheet with:
+    - Server-side cheatsheet store with `versions[]` per cheatsheet.
+    - Tiptap-based WYSIWYG editor on the right pane (A4 size, 3-column CSS
+      `column-count: 3`, page-break-after every page-height-worth of content,
+      page navigator `1/N`).
+    - Left chat pane: each user message creates a new version; "See Version 1
+      / 2 / 3" version label is clickable to switch.
+    - `Edit via chat` toggle to switch the right pane between AI-edit
+      (read-only with chat-driven mutations) and direct-edit (WYSIWYG).
+16. **Report Writer with embedded Visualizer diagrams** *(L)* — Dual-pane
+    chat + Tiptap WYSIWYG. When the prompt mentions "with a diagram" or the
+    AI decides one is appropriate, call into the Visualizer agent router and
+    embed the result inline. Format toolbar (B/I/U/list/align/highlight),
+    Export menu (Copy / PDF / DOCX), Undo / Try again buttons.
+17. **PDF Notes hierarchical TOC + paginated study notes** *(L)* — Replace
+    single-blob output with:
+    - PDF parse → outline extraction (PDF bookmarks if present, else heading
+      heuristics on `unpdf` output).
+    - LLM pass per section → structured study notes (info-box layout, bold
+      lead-ins, bulleted points, KaTeX, monospace code blocks, embedded
+      diagrams).
+    - Section view with sticky 3-pane layout (TOC left, notes center, action
+      bar top).
+    - `< Previous / 1/1 / Next >` pagination within sections.
+    - `A- / A+ / Reset` font-size controls (CSS variable that scales rem
+      values).
+    - Auto-classify subject + level (`CS · graduate · ENGLISH · 15p`) with a
+      classifier LLM call.
+18. **AI Chat dual-pane Deep Explain mode** *(L)* — Add a `Deep explain`
+    toggle that switches the chat into a Claude-Artifacts-like layout:
+    chat thread on the left + standalone artifact on the right. Both saved
+    as separate but linked entities in the recent list.
+19. **Notebook multi-tab + multi-chat-per-notebook + Study Log + 7 source
+    types** *(L)* — Major rebuild of the current single-tab notebook:
+    - Tabbed UI (multiple notebooks open in same window).
+    - Per-notebook multiple chat threads (`Current chat ▼` dropdown +
+      `+ New chat`).
+    - Source ingestion for: PDF / images / documents / audio (Whisper) /
+      video (extract audio, then Whisper) / YouTube (yt-dlp + Whisper) /
+      Google Drive (OAuth) / Text (paste).
+    - Three artifact types: Summary / Quiz / Flashcard, with multi-source
+      selection (max 20 sources).
+    - Study Log tab as a free-form markdown editor saved per notebook.
+
+#### Tier D — small polish wins
+
+20. **Per-section font size controls (`A- A+ Reset`)** *(XS)* — Add to PDF
+    Notes section view. Pure CSS variable.
+21. **Multilingual output language selector** in PDF Notes *(S)* — Dropdown
+    with major languages; pass through as a `target_language` system prompt
+    parameter.
+22. **Sample galleries** on every feature landing *(S)* — Static curated
+    examples below the composer with lightbox preview + Download button.
+23. **`Send feedback`** orange button (BETA features only) *(XS)* — opens a
+    small form modal that POSTs to a feedback endpoint.
+24. **Sidebar Recent rename/delete per item** *(XS)* — Hover state shows `…`
+    menu with Rename / Delete.
+
+### Observed quirks / model-API notes for next session
+
+- gpai.app's `Mixture of AI` is a router, not a single model — different
+  visualizations are clearly produced by different specialized pipelines (the
+  matplotlib output of Graph AI vs the SVG output of Diagram AI). Forge's
+  Visualizer single-model approach cannot replicate the output style without
+  per-domain routing.
+- The cross-check pipeline appears to run a SECOND model in parallel and a
+  third LLM as a judge labeling `AGREE/MINOR/DISAGREE`. We already have this
+  in `runCrossCheckOnAnswer` — just need badge UX polish.
+- Streaming events appear to be structured (the Solver's parallel `Answer` +
+  `Solution` rendering can't be done with a flat token stream — the backend
+  must emit `{section: "answer", delta: ...}` style events).
+- The Cheatsheet's "Version 1 / 2 / 3" label suggests the backend stores each
+  iteration as an immutable artifact version; the chat refers to the latest by
+  default.
+- The Notebook's leaked Korean placeholder ("내용을 입력하세요...") confirms
+  gpai.app is built primarily for the Korean market — be aware of this when
+  thinking about i18n / RTL support priorities.
+- All new tasks (Solver / Cheatsheet / Report / etc.) are auto-titled by an
+  LLM. The title appears in the sidebar Recent within ~1 second of submit.
+  This is a separate API call, not embedded in the main response stream.
+- Daily credits: 50/day for free plan. Consumption observed: Solver task ≈ 30,
+  Quiz ≈ 5, Follow-up chip message ≈ 5. PDF Notes uses a SEPARATE quota
+  ("2 free per day during Beta") — not credits.
+
+### What's safe to skip / defer
+
+- **Pricing / Subscription / Account / billing pages** — explicitly
+  out-of-scope per user instruction. Don't audit, don't replicate.
+- **Visualizer Figma-lite canvas editor** can be deferred until after the
+  9-agent router ships. The canvas editor is gravy on top — the value is in
+  the per-domain output quality.
+- **YouTube / Drive / audio / video Notebook source types** can be deferred
+  until after PDF + image + text Notebook works end-to-end. Each adds a
+  significant ingestion pipeline (yt-dlp, Whisper, Drive OAuth) so do them
+  one at a time, not all at once.
+- **`Cross-check with [icons]`** indicator under the model selector is purely
+  cosmetic — don't ship without the actual cross-check pipeline being
+  visually correct (Tier A #2 first).
+
+---
+
+## Handover Prompt for Next Session
+
+> Copy-paste EVERYTHING below (from the `---` line down) into the next Devin
+> session verbatim.
+
+---
+
+You are continuing work on **`Asdfyash1/GPAI`** — a clone of gpai.app rebranded
+as **Forge**. Repo at `/home/ubuntu/repos/GPAI`. Previous session URL:
+https://app.devin.ai/sessions/1fcd2760b5f2450ab653b9bf5ad563ee
+
+### What just happened
+
+The previous session did **a comprehensive deep-dive audit** of every gpai.app
+feature (except pricing/billing) — captured exact response markdown, UI
+behavior, model selectors, export modals, share popups, follow-up chip
+behavior, and 46 fresh screenshots. **No code was changed** — the audit PR is
+research-only.
+
+### Files you MUST read first (in this order)
+
+1. **`research/audit-2026-05-02/findings.md`** — full audit write-up. Sections:
+   1 (top-level chrome) → 2 (Solver) → 3 (Visualizer) → 4 (AI Chat) → 5 (Cheatsheet) →
+   6 (Report Writer) → 7 (PDF Notes) → 8 (Notebook) → 9 (cross-feature patterns) →
+   10 (Korean origin clue) → 11 (gap list) → 12 (audit metadata).
+2. **`research/screenshots/audit-2026-05-02/`** — 46 numbered screenshots.
+   Filenames map directly to sections (`01-…16-…` = Solver,
+   `17-22` = Home/Settings, `23-33` = Visualizer, `34-35` = AI Chat,
+   `36-37` = Cheatsheet, `38-39` = Report Writer, `40-42` = PDF Notes,
+   `43-46` = Notebook).
+3. **`research/gpai-features-reference.md` §13** — additions from this audit
+   summarised back into the canonical reference doc.
+4. **`BACKLOG.md` "Feature Audit Findings — 2026-05-02"** — the
+   stack-ranked gap list. Read the entire section before starting work.
+
+### What to do next
+
+The user said: *"deep dive every feature present in gpai ai even this seesion is
+closed u should not stop untill ur finish weery feature."* So the long-term
+goal is to **close every gap** between Forge and gpai.app.
+
+**Ship gap-closure PRs in this order** (matches BACKLOG.md tier order):
+
+#### Phase 1 — Tier A (week 1, every PR ½–1 day)
+
+Each of these is a small focused PR. Ship them one at a time, in order. Do
+NOT batch them together — small PRs land faster and reviewer can verify each
+gap closes cleanly.
+
+- **PR 1: Auto-titled tasks** (Tier A #1, XS) — Add an LLM follow-up call
+  that summarises the problem in ≤5 words and saves to the task store.
+  Sidebar Recent shows the title instead of the timestamp ID.
+- **PR 2: CrossCheckBadge avatar polish** (Tier A #2, S) — Add the two
+  model-avatar circles + tooltip with model names to match upstream visual.
+- **PR 3: Quiz panel functional** (Tier A #4, S) — Pagination, MCQ feedback
+  (green ✓ / red ✗ on click), auto-show Explanation, Hint button. The
+  `/api/quiz` endpoint and component already exist; this is UX polish.
+- **PR 4: Follow-up chips functional** (Tier A #5, S) — Wire the four chips
+  to fire pre-canned prompts to `/api/chat` with task context. Render
+  response as a chat thread on the right rail.
+- **PR 5: Try-demo carousel + Personalize tab** (Tier A #6 + #7, S) — Two
+  small UI additions that can be one PR. 3 rotating Solver demo cards +
+  Settings → Personalize tab with Occupation + Custom Instructions fields.
+- **PR 6: Cross-check indicator on model selector** (Tier A #8, XS) — Add
+  the verifier-model-icon subhead under "GPAI Pro" in the model selector.
+- **PR 7: Inline orange glossary terms** (Tier A #3, M) — Post-process
+  streamed markdown with a glossary LLM pass; render as `<dfn class=
+  "glossary-term">` with click-to-define tooltip. Apply to Solver, Chat,
+  PDF Notes, Cheatsheet. Largest of Tier A — ship last.
+
+After Tier A, the user-visible gap should drop ~50% with limited code
+churn. Pause and confirm with the user before starting Tier B.
+
+#### Phase 2 — Tier B (week 2-3)
+
+PRs 8-13 from BACKLOG.md (streaming sections in parallel, Download modal,
+public share, Quiz/Flashcard/Practice Test, adaptive follow-up cards). Each
+is M-effort; budget ~2-3 PRs per session.
+
+#### Phase 3 — Tier C (multi-week)
+
+PRs 14-19 are large rebuilds. The first one — **specialized Visualizer
+agents** — is XL effort but the highest-impact gap in the entire audit.
+Consider doing this as a multi-PR series:
+1. Agent router (classifies prompts into bucket).
+2. Graph AI + Flowchart AI (lowest-effort agents).
+3. Diagram AI + Circuit AI.
+4. Chemistry AI + Logic AI.
+5. Illustration AI (highest-effort: needs an image gen model).
+6. Canvas editor wrap.
+
+### Quirks to mimic (model API behaviors)
+
+- gpai.app streams `Answer` and `Solution` **in parallel** — backend emits
+  structured `{section, delta}` events. Forge today emits a flat text stream.
+- gpai.app auto-titles tasks with a separate API call after the response,
+  not inline.
+- gpai.app's `Cross-checked` badge is from a parallel-verifier pipeline with
+  a 3rd LLM judge (we have this; UI polish is what's missing).
+- gpai.app's Visualizer is a router across 9 specialized agents — single-model
+  approaches cannot match the output style.
+- gpai.app's Cheatsheet has versioning — the chat refers to the latest version
+  by default but you can switch to older ones.
+- Daily credit consumption: Solver ≈ 30, Quiz ≈ 5, Follow-up chip ≈ 5.
+- PDF Notes uses a SEPARATE "2 free per day during Beta" quota, not credits.
+- The Notebook leaked Korean placeholder confirms gpai.app's primary market
+  is Korean. Be aware for i18n discussions.
+
+### What's safe to skip
+
+- **Pricing / billing / subscription** — explicitly excluded by the user.
+- **Visualizer Figma-lite canvas editor** — defer until 9-agent router ships.
+  Canvas is gravy on top.
+- **YouTube / Drive / audio / video** Notebook source types — defer until
+  PDF + image + text Notebook works end-to-end.
+- **Korean / RTL i18n** — the Korean origin is a curiosity, not a blocker.
+- **Daily quota system** — Forge doesn't need this.
+
+### What NOT to do
+
+- Don't refactor for "cleanliness" without a user-facing gap to close. Every
+  PR should map to a numbered gap from `BACKLOG.md`.
+- Don't ship a Visualizer canvas editor before the agent router. The
+  router is the value.
+- Don't change the OCR pipeline — `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`
+  is the verified single-call model from PR #31 and #33. Do not regress to
+  multi-provider chains.
+- Don't add Mistral, Groq, OpenRouter, or any paid third-party providers
+  (user explicitly vetoed).
+- Don't force-push to main. Use `devin/$(date +%s)-<short-name>` branches.
+- Don't `git add .` — stage only the files you intend to ship.
+
+### Standing user rules
+
+- Always update `BACKLOG.md` in every PR with what you did + what's next, so
+  the next session can pick up cleanly.
+- Always run `npx tsc --noEmit && npm run lint && npm run build` before
+  pushing. All three must be clean.
+- Always create a PR via `git_pr(action="fetch_template")` then
+  `git_pr(action="create")`. Update `BACKLOG.md` + reference doc as part of
+  every PR.
+- Always include the Vercel preview URL in your final message to the user.
+
+### Your first message to the user
+
+Something like:
+
+> "Picked up from the previous session's audit. Read
+> `research/audit-2026-05-02/findings.md` and the BACKLOG. Starting with Tier A
+> PR 1 — auto-titled tasks (Forge currently shows timestamp IDs in the sidebar;
+> gpai.app shows LLM-extracted titles like 'Ordinary Differential Equation').
+> Will ship as a single small PR. ~30 min ETA."
+
+Then start working. Do not block on the user before shipping the first PR —
+they've already approved the gap-closure direction. Just keep them updated
+with PR links as each one merges.
