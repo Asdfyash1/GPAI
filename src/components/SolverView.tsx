@@ -27,6 +27,7 @@ import { Composer } from "@/components/Composer";
 import { MathMarkdown } from "@/components/MathMarkdown";
 import { ModelAvatars, modelDisplay } from "@/components/ModelAvatars";
 import { useStream } from "@/hooks/useStream";
+import { usePersonalization } from "@/hooks/usePersonalization";
 
 type SolverViewProps = {
   modelChoice: ModelChoice;
@@ -57,7 +58,25 @@ const QUICK_DEMOS = [
     detail: "Up to 60 problems from an uploaded sheet",
     accent: "rose",
   },
+  {
+    label: "Verify a step you're not sure about",
+    detail: "Check whether dy/dx of x ln x is ln x + 1",
+    accent: "emerald",
+  },
+  {
+    label: "Get a quick concept refresher",
+    detail: "What is Bayes' theorem and when do I actually use it?",
+    accent: "sky",
+  },
+  {
+    label: "Translate a textbook problem",
+    detail: "Solve this Korean physics problem about a hanging mass",
+    accent: "violet",
+  },
 ];
+
+const DEMO_CARDS_PER_PAGE = 3;
+const DEMO_ROTATION_MS = 7_000;
 
 const QUICK_CHIPS = [
   "Make it easy",
@@ -70,6 +89,7 @@ export function SolverView(props: SolverViewProps) {
   const [crossCheck, setCrossCheck] = useState(true);
   const [streamText, setStreamText] = useState("");
   const stream = useStream<EducationResponse>();
+  const personalization = usePersonalization();
 
   const handleSubmit = (overridePrompt?: string) => {
     const finalPrompt = (overridePrompt ?? props.prompt).trim();
@@ -86,6 +106,7 @@ export function SolverView(props: SolverViewProps) {
         attachments: props.attachments,
         crossCheck,
         modelChoice: props.modelChoice,
+        personalization: personalization.request,
       },
       {
         onChunk: (visible) => setStreamText(visible),
@@ -168,15 +189,64 @@ function RotatingPhrase({ phrases }: { phrases: string[] }) {
 }
 
 function DemoCards({ onPick }: { onPick: (prompt: string) => void }) {
+  // The carousel rotates every DEMO_ROTATION_MS by advancing the start
+  // index by one card and wrapping with modulo. We slice DEMO_CARDS_PER_PAGE
+  // items via a doubled QUICK_DEMOS array so the wrap-around is seamless
+  // (no "page jumps to 0" reset visible to the user). Auto-rotation is
+  // paused while the user is hovering the grid so they can read a card.
+  const [start, setStart] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const total = QUICK_DEMOS.length;
+
+  useEffect(() => {
+    if (paused) return;
+    if (total <= DEMO_CARDS_PER_PAGE) return;
+    const interval = setInterval(() => {
+      setStart((s) => (s + 1) % total);
+    }, DEMO_ROTATION_MS);
+    return () => clearInterval(interval);
+  }, [paused, total]);
+
+  const visible = Array.from({ length: DEMO_CARDS_PER_PAGE }, (_, i) =>
+    QUICK_DEMOS[(start + i) % total],
+  );
+
   return (
     <section className="quick-section">
-      <h2 className="quick-title">Try demo</h2>
-      <div className="demo-grid">
-        {QUICK_DEMOS.map((d) => (
+      <div className="quick-section-head">
+        <h2 className="quick-title">Try demo</h2>
+        {total > DEMO_CARDS_PER_PAGE && (
+          <div
+            className="demo-dots"
+            role="tablist"
+            aria-label="Demo carousel pages"
+          >
+            {QUICK_DEMOS.map((d, i) => (
+              <button
+                key={d.detail}
+                type="button"
+                role="tab"
+                aria-selected={i === start}
+                aria-label={`Show demo ${i + 1}: ${d.label}`}
+                className={`demo-dot ${i === start ? "is-active" : ""}`}
+                onClick={() => setStart(i)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div
+        className="demo-grid"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onFocus={() => setPaused(true)}
+        onBlur={() => setPaused(false)}
+      >
+        {visible.map((d) => (
           <button
             key={d.detail}
             type="button"
-            className={`demo-card demo-${d.accent}`}
+            className={`demo-card demo-${d.accent} demo-card-anim`}
             onClick={() => onPick(d.detail)}
           >
             <span className="demo-label">{d.label}</span>

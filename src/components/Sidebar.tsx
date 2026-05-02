@@ -1,6 +1,13 @@
 "use client";
 
-import { Plus, PanelLeftClose, PanelLeft, ChevronRight, Trash2 } from "lucide-react";
+import {
+  Plus,
+  PanelLeftClose,
+  PanelLeft,
+  ChevronRight,
+  Trash2,
+  Settings,
+} from "lucide-react";
 import type { FeatureMode } from "@/types/education";
 
 export type SidebarItem = {
@@ -18,6 +25,7 @@ type SidebarProps = {
   onSelect: (item: SidebarItem) => void;
   onDelete?: (item: SidebarItem) => void;
   onNewTask: () => void;
+  onOpenSettings?: () => void;
   userLabel?: string;
 };
 
@@ -29,6 +37,7 @@ export function Sidebar({
   onSelect,
   onDelete,
   onNewTask,
+  onOpenSettings,
   userLabel = "Guest",
 }: SidebarProps) {
   return (
@@ -113,6 +122,18 @@ export function Sidebar({
       )}
 
       <div className="sidebar-bottom">
+        {onOpenSettings && (
+          <button
+            type="button"
+            className="sidebar-settings-btn"
+            onClick={onOpenSettings}
+            aria-label="Open settings"
+            title="Settings"
+          >
+            <Settings size={14} />
+            {!collapsed && <span>Settings</span>}
+          </button>
+        )}
         <div className="profile-row">
           <span className="profile-avatar" aria-hidden>
             {userLabel.charAt(0).toUpperCase()}

@@ -67,6 +67,7 @@ export async function POST(request: Request) {
     attachments,
     crossCheck: body.crossCheck ?? true,
     modelChoice: body.modelChoice ?? "auto",
+    personalization: body.personalization,
   };
 
   const encoder = new TextEncoder();
