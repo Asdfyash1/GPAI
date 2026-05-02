@@ -2608,6 +2608,37 @@ a {
 
 /* ===========  RESPONSIVE ============ */
 
+/*
+ * MOBILE STRATEGY — read this before editing.
+ *
+ * Every rule in this section is scoped to a `@media (max-width: …)`
+ * block so desktop (≥ 981px) renders identically to before. We never
+ * edit base styles to "make them mobile-friendly" because that risks
+ * silently regressing the desktop layout. If a mobile fix needs more
+ * than a media-query override, add a new modifier class instead.
+ *
+ * Breakpoints (chosen to match the existing rules above so we don't
+ * fragment the mental model):
+ *   - 980px ── tablet / narrow laptop. Dual-pane views collapse to
+ *              a single column, the right rail stops sticking. Mode
+ *              tabs start scrolling horizontally if they would wrap.
+ *   - 720px ── phone. Sidebar becomes an off-canvas drawer keyed off
+ *              `.is-mobile-open`, hamburger is visible, composer +
+ *              chips reflow, modals fill the viewport.
+ *   - 420px ── compact phone. Tighter padding, smaller font scale.
+ */
+
+/* The hamburger lives in the topbar but is invisible on desktop. */
+.workspace-menu-button {
+  display: none;
+}
+
+/* Backdrop for the mobile drawer. Only rendered when open, but keep a
+ * baseline rule here so it picks up theme tokens correctly. */
+.sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 980px) {
   .solver-layout {
     grid-template-columns: 1fr;
@@ -2625,33 +2656,205 @@ a {
   .cheatsheet-main {
     height: auto;
   }
+  /* Mode tabs on tablets: never wrap; let the user swipe. */
+  .mode-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .mode-tabs::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
+  /* ── Shell: collapse the grid to a single column. The sidebar is
+   * promoted to `position: fixed` so the workspace doesn't reserve
+   * any horizontal space for it. */
   .app-shell {
     grid-template-columns: 1fr;
   }
+  .app-shell:has(.sidebar.is-collapsed) {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Sidebar: off-canvas drawer keyed off `.is-mobile-open`.
+   * `.is-collapsed` (desktop rail-mode) is intentionally ignored here
+   * so the rail-mode is purely a desktop affordance. */
   .sidebar {
     position: fixed;
+    inset: 0 auto 0 0;
     z-index: 50;
-    width: 252px;
+    width: min(280px, 84vw);
     transform: translateX(-100%);
     transition: transform 220ms ease;
-  }
-  .sidebar:not(.is-collapsed) {
-    transform: translateX(0);
     box-shadow: var(--shadow-popover);
   }
-  .workspace-topbar,
-  .workspace-body {
-    padding-left: 14px;
-    padding-right: 14px;
+  .sidebar.is-mobile-open {
+    transform: translateX(0);
   }
+  /* On mobile we always show the full sidebar contents — never the
+   * rail-mode form, even if `is-collapsed` is set. */
+  .sidebar.is-collapsed {
+    align-items: stretch;
+    padding: 14px 12px;
+  }
+  .sidebar.is-collapsed .brand-name,
+  .sidebar.is-collapsed .new-task-btn span,
+  .sidebar.is-collapsed .sidebar-settings-btn span,
+  .sidebar.is-collapsed .profile-name {
+    display: inline;
+  }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 49;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  /* ── Topbar: hamburger appears, padding tightens. Mode tabs scroll
+   * horizontally instead of wrapping to a second row. */
+  .workspace-menu-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--bg-elev);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .workspace-topbar {
+    padding: 14px 14px 4px;
+    gap: 8px;
+  }
+  .workspace-body {
+    padding: 0 14px 24px;
+  }
+  .workspace-topbar-right {
+    flex-shrink: 0;
+  }
+
+  /* ── Hero / demo cards: stack 1-up. */
   .hero-title {
-    font-size: 32px;
+    font-size: 28px;
+  }
+  .hero-subtitle {
+    font-size: 14px;
   }
   .demo-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* ── Composer: full-width textarea, attachments wrap, send button
+   * keeps its 32px touch target. */
+  .composer {
+    padding: 12px;
+  }
+  .composer-bottom {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .composer-actions {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .attachment-row {
+    flex-wrap: wrap;
+  }
+
+  /* ── Solver result: meta row + chips + thread reflow. */
+  .result-header {
+    gap: 6px;
+  }
+  .result-meta {
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .result-actions {
+    margin-left: 0;
+  }
+  /* Follow-up + quick chip grids share `.chip-grid` markup; let them
+   * wrap to multiple rows on phones. */
+  .chip-grid {
+    grid-template-columns: 1fr;
+  }
+  .followup-thread {
+    margin-left: 0;
+    margin-right: 0;
+  }
+  .rail-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .rail-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ── Quiz: pager keeps its size, choices use full width. */
+  .quiz-section-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .quiz-choices {
+    gap: 6px;
+  }
+  .quiz-choice-button {
+    padding: 10px 12px;
+  }
+
+  /* ── KaTeX: very wide equations pan instead of overflowing. */
+  .math-markdown .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+  }
+  .math-markdown pre {
+    overflow-x: auto;
+  }
+
+  /* ── Modals: full-screen sheet on phone. */
+  .settings-dialog {
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+  }
+  .settings-overlay {
+    padding: 0;
+  }
+
+  /* ── Touch targets: bump small icon buttons to 36px so they're
+   * comfortably tappable. */
+  .icon-button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
+@media (max-width: 420px) {
+  .workspace-topbar {
+    padding: 10px 10px 4px;
+  }
+  .workspace-body {
+    padding: 0 10px 20px;
+  }
+  .hero-title {
+    font-size: 24px;
+  }
+  /* Demo cards already stack at 720px; tighten their internal padding. */
+  .demo-card {
+    padding: 14px;
   }
 }
 

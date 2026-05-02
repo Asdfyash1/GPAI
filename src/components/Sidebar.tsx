@@ -20,6 +20,13 @@ export type SidebarItem = {
 type SidebarProps = {
   collapsed: boolean;
   onToggle: () => void;
+  /**
+   * Mobile-only drawer state. On viewports ≤ 720px the sidebar is
+   * positioned `fixed` and translated off-screen unless this is `true`.
+   * Independent of `collapsed`, which controls the desktop "rail-only"
+   * mode.
+   */
+  mobileOpen?: boolean;
   items: SidebarItem[];
   activeItemId?: string;
   onSelect: (item: SidebarItem) => void;
@@ -32,6 +39,7 @@ type SidebarProps = {
 export function Sidebar({
   collapsed,
   onToggle,
+  mobileOpen = false,
   items,
   activeItemId,
   onSelect,
@@ -41,7 +49,11 @@ export function Sidebar({
   userLabel = "Guest",
 }: SidebarProps) {
   return (
-    <aside className={`sidebar ${collapsed ? "is-collapsed" : ""}`}>
+    <aside
+      className={`sidebar ${collapsed ? "is-collapsed" : ""} ${
+        mobileOpen ? "is-mobile-open" : ""
+      }`}
+    >
       <div className="sidebar-top">
         <div className="brand">
           <span className="brand-mark" aria-hidden>
