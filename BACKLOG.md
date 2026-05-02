@@ -188,6 +188,14 @@ After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="crea
 
 ## Changelog (append-only — every session adds an entry)
 
+- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: auto-titled tasks (Tier A #1):** _new PR after #35 audit merged._
+  - **What:** Forge's sidebar Recent showed timestamp IDs / 60-char prompt slices. gpai.app shows a 2-5 word semantic title (e.g. "Solving 4th-order ODE", "Quadratic factoring") within ~1 s of submit. Closes Tier A gap #1 from the 2026-05-02 audit.
+  - **How:** new `generateTaskTitle(request, primaryAnswerText)` in `src/lib/orchestrator.ts` — small post-stream LLM call (24-token cap, 15 s abort) that returns a cleaned 2-5 word title. `parseModelResponse(markdown, request, verification, options?)` now accepts an optional `titleOverride`. Wired into `runEducationalOrchestrator` (sequential, awaits before parse) and `/api/educate/stream/route.ts` (parallel with `runCrossCheckOnAnswer` via `Promise.all` so the user-visible TTFT is unchanged — only the structured tail waits).
+  - **Skipped for `chat` mode** because `EducationApp.handleChatMessagesChange` already titles chats from the first user message — adding an LLM call there would just duplicate work and cost a request.
+  - **Override:** `NVIDIA_TITLE_MODEL` env var if you want a smaller/faster model than the primary solver (defaults to whatever `configuredProviders()[0].solverModel` is).
+  - **Robustness:** `cleanTitle()` strips wrapping quotes/backticks/asterisks, trims trailing `.!?…`, rejects bodies > 80 chars / < 2 chars / starting with markdown (`#>*`). On any failure (timeout, API error, empty response, malformed body) returns `null` and the caller falls back to the existing `inferTitle()` heuristic. No regression risk.
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean.
+
 - **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — vision: defensive `NVIDIA_VISION_MODEL` env-var handling + README scrub:** _PR follow-up to #31._
   - **Reported by user immediately after merging #31:** production was still failing with `OCR call failed via mistralai/mistral-large-3-675b-instruct-2512: HTTP 400: chat_template is not supported for Mistral tokenizers`. **Root cause:** the user's Vercel project still had `NVIDIA_VISION_MODEL=mistralai/mistral-large-3-675b-instruct-2512` set as an env var (left over from the old README example). PR #31's `process.env.NVIDIA_VISION_MODEL ?? <default>` honored that env var, so the broken value won and the deploy invoked a non-existent NIM model with a Nemotron-only request body, getting HTTP 400 on the `chat_template_kwargs` extension.
   - **Fix in this PR:**
@@ -324,11 +332,15 @@ Effort scale: XS = <½ day · S = ½–1 day · M = 1–2 days · L = 2–5 days
 
 #### Tier A — high-impact, low-to-medium effort (ship first)
 
-1. **Auto-titled tasks** *(XS)* — Forge currently shows timestamp IDs in the
-   Recent sidebar. gpai.app shows a 2-4-word LLM-extracted title within ~1s of
-   submit. Add a small follow-up call after the first 200 tokens of the answer
-   that asks `Summarise this problem in ≤5 words for a sidebar entry`. Save to
-   the task store.
+1. ~~**Auto-titled tasks** *(XS)*~~ — **DONE** (2026-05-02). Added
+   `generateTaskTitle(request, primaryAnswerText)` in `src/lib/orchestrator.ts`
+   (small post-stream LLM call asking for a 2-5 word semantic sidebar title).
+   Wired into both `/api/educate` (sequential) and `/api/educate/stream` (in
+   parallel with cross-check via `Promise.all`). `parseModelResponse` now
+   accepts an optional `titleOverride`. Result: sidebar Recent shows
+   "Solving 4th-order ODE" instead of "(D⁴ − 2D³ + D²)y = x³". Skipped for
+   `chat` mode (chats title themselves from first user message).
+   Override via `NVIDIA_TITLE_MODEL` env var (defaults to primary solver model).
 2. **Cross-check `Cross-checked` badge polish** *(S)* — The CrossCheckBadge
    component already exists. Match upstream visual: two avatar circles + green
    `✓ Cross-checked` label + tooltip listing the model names. Today our badge

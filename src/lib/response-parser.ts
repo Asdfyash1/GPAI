@@ -141,6 +141,7 @@ export function parseModelResponse(
   markdown: string,
   request: EducationRequest,
   verification: VerificationSignal[],
+  options: { titleOverride?: string | null } = {},
 ): EducationResponse {
   const answer =
     extractAnswer(markdown) ||
@@ -197,9 +198,15 @@ export function parseModelResponse(
     }),
   );
 
+  const overrideTitle = options.titleOverride?.trim();
+  const finalTitle =
+    overrideTitle && overrideTitle.length > 0
+      ? overrideTitle
+      : inferTitle(request);
+
   return {
     id: `gen_${Date.now()}`,
-    title: inferTitle(request),
+    title: finalTitle,
     mode: request.mode,
     prompt: request.prompt,
     answer,
