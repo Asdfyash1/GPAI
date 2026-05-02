@@ -56,6 +56,7 @@ export async function POST(request: Request) {
       attachments,
       crossCheck: body.crossCheck ?? true,
       modelChoice: body.modelChoice ?? "auto",
+      personalization: body.personalization,
     });
 
     return Response.json(response);

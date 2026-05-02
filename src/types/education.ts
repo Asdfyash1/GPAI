@@ -35,6 +35,13 @@ export type UploadedAsset = {
   extractedText?: string;
 };
 
+export type Personalization = {
+  /** Free-text role / job title (max ~200 chars). */
+  occupation?: string;
+  /** Free-text instructions injected into the system prompt (max ~10000 chars). */
+  customInstructions?: string;
+};
+
 export type EducationRequest = {
   mode: FeatureMode;
   prompt: string;
@@ -43,6 +50,13 @@ export type EducationRequest = {
   attachments: UploadedAsset[];
   crossCheck: boolean;
   modelChoice: ModelChoice;
+  /**
+   * Per-user customisation injected into the model's system prompt. When
+   * present, the model will tailor its responses to the user's stated
+   * occupation and any custom instructions they configured under Settings →
+   * Personalize. Optional — null/undefined means "no personalisation".
+   */
+  personalization?: Personalization;
 };
 
 export type VerificationSignal = {
@@ -121,6 +135,8 @@ export type ChatRequest = {
   modelChoice: ModelChoice;
   deepExplain: boolean;
   webEnabled?: boolean;
+  /** Per-user customisation injected into the chat system prompt. */
+  personalization?: Personalization;
 };
 
 export type ChatSession = {

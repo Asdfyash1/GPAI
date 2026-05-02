@@ -9,6 +9,7 @@ import type {
 import { Composer } from "@/components/Composer";
 import { MathMarkdown } from "@/components/MathMarkdown";
 import { useStream } from "@/hooks/useStream";
+import { usePersonalization } from "@/hooks/usePersonalization";
 
 type SourceItem = {
   title: string;
@@ -68,6 +69,7 @@ export function ChatView({
   const [webEnabled, setWebEnabled] = useState(false);
   const [streamText, setStreamText] = useState("");
   const stream = useStream();
+  const personalization = usePersonalization();
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -103,6 +105,7 @@ export function ChatView({
         modelChoice,
         deepExplain,
         webEnabled,
+        personalization: personalization.request,
       },
       {
         onChunk: (textSoFar) => setStreamText(textSoFar),

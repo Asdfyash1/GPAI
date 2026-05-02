@@ -10,7 +10,12 @@ import type {
 } from "@/types/education";
 import { buildDemoResponse } from "@/lib/demo-solver";
 import { parseModelResponse } from "@/lib/response-parser";
-import { buildTaskPrompt, buildVerifierPrompt, getSystemPrompt } from "@/lib/prompts";
+import {
+  buildPersonalizationSuffix,
+  buildTaskPrompt,
+  buildVerifierPrompt,
+  getSystemPrompt,
+} from "@/lib/prompts";
 import {
   ATTACHMENT_FAILURE_PREFIX,
   findUnreadableAttachments,
@@ -147,7 +152,7 @@ export async function runEducationalOrchestrator(request: EducationRequest) {
     draft = await generateWithProvider(
       primary,
       solverModel,
-      getSystemPrompt(request.mode),
+      getSystemPrompt(request.mode, request.personalization),
       buildTaskPrompt(request),
     );
     verification.push({
@@ -272,7 +277,7 @@ export async function streamEducationalSolverDraft(
 
   const result = streamText({
     model: buildLanguageModel(primary, modelName),
-    system: getSystemPrompt(request.mode),
+    system: getSystemPrompt(request.mode, request.personalization),
     prompt: buildTaskPrompt(request),
     temperature: 0.2,
     maxOutputTokens: 4096,
@@ -490,6 +495,7 @@ export async function streamChatResponse(options: {
   modelChoice: ModelChoice;
   deepExplain: boolean;
   webContext?: string;
+  personalization?: EducationRequest["personalization"];
 }): Promise<StreamingHandle> {
   const providers = configuredProviders();
   if (options.modelChoice === "demo" || providers.length === 0) {
@@ -518,6 +524,8 @@ export async function streamChatResponse(options: {
     "Never start a response with 'Understanding the ...' or any other forced essay framing.";
 
   let system = options.deepExplain && !trivial ? deepExplainSystem : conversationalSystem;
+
+  system += buildPersonalizationSuffix(options.personalization);
 
   if (options.webContext && options.webContext.trim().length > 0) {
     system += "\n\nWeb search context:\n" + options.webContext;

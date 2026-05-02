@@ -59,6 +59,7 @@ export async function POST(request: Request) {
       modelChoice,
       deepExplain: body.deepExplain ?? false,
       webContext,
+      personalization: body.personalization,
     });
 
   const encoder = new TextEncoder();

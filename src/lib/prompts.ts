@@ -174,23 +174,70 @@ Mandatory structure for solver mode:
 
 Upgrade the draft if it is too thin: add missing assumptions, formula definitions, unit checks, alternate method notes, and learner warnings.`;
 
-export function getSystemPrompt(mode: string): string {
+export function getSystemPrompt(
+  mode: string,
+  personalization?: EducationRequest["personalization"],
+): string {
+  let base: string;
   switch (mode) {
     case "chat":
-      return chatSystemPrompt;
+      base = chatSystemPrompt;
+      break;
     case "visualizer":
-      return visualizerSystemPrompt;
+      base = visualizerSystemPrompt;
+      break;
     case "cheatsheet":
-      return cheatsheetSystemPrompt;
+      base = cheatsheetSystemPrompt;
+      break;
     case "report":
-      return reportSystemPrompt;
+      base = reportSystemPrompt;
+      break;
     case "pdf-notes":
-      return pdfNotesSystemPrompt;
+      base = pdfNotesSystemPrompt;
+      break;
     case "notebook":
-      return notebookSystemPrompt;
+      base = notebookSystemPrompt;
+      break;
     default:
-      return textbookSystemPrompt;
+      base = textbookSystemPrompt;
   }
+  return base + buildPersonalizationSuffix(personalization);
+}
+
+/**
+ * Build a `\n\n[USER PREFERENCES]…` block to append to the model's system
+ * prompt. The block is only included when at least one personalization
+ * field is non-empty after trimming, so an empty Settings panel is a
+ * complete no-op (no extra tokens, no behaviour change).
+ *
+ * `customInstructions` is hard-capped at 10 000 chars to keep token costs
+ * predictable; `occupation` is hard-capped at 200 chars (plenty for
+ * "Mechanical engineer doing graduate ME 503 dynamics homework").
+ */
+export function buildPersonalizationSuffix(
+  personalization: EducationRequest["personalization"] | undefined,
+): string {
+  if (!personalization) return "";
+  const occupation = (personalization.occupation ?? "").trim().slice(0, 200);
+  const customInstructions = (personalization.customInstructions ?? "")
+    .trim()
+    .slice(0, 10_000);
+  if (!occupation && !customInstructions) return "";
+
+  const lines: string[] = [
+    "",
+    "",
+    "[USER PREFERENCES]",
+    "Tailor your responses to the user's stated context. These preferences are advisory — never violate the core formatting / safety rules above.",
+  ];
+  if (occupation) {
+    lines.push(`- Role / occupation: ${occupation}`);
+  }
+  if (customInstructions) {
+    lines.push("- Custom instructions:");
+    lines.push(customInstructions);
+  }
+  return lines.join("\n");
 }
 
 export function buildTaskPrompt(request: EducationRequest) {

@@ -19,6 +19,7 @@ import { VisualizerView } from "@/components/VisualizerView";
 import { DocumentView } from "@/components/DocumentView";
 import { NotebookView } from "@/components/NotebookView";
 import { PdfNotesView } from "@/components/PdfNotesView";
+import { SettingsModal } from "@/components/SettingsModal";
 
 type Theme = "dark" | "light";
 
@@ -31,6 +32,7 @@ export function EducationApp() {
   const [mode, setMode] = useState<FeatureMode>("solver");
   const [theme, setTheme] = useState<Theme>("dark");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("auto");
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
   const [solverPrompt, setSolverPrompt] = useState("");
@@ -272,7 +274,14 @@ export function EducationApp() {
         onSelect={handleSelectItem}
         onDelete={handleDeleteItem}
         onNewTask={handleNewTask}
+        onOpenSettings={() => setSettingsOpen(true)}
         userLabel="hiyash04+asd1"
+      />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        theme={theme}
+        onThemeChange={setTheme}
       />
       <main className="workspace">
         <header className="workspace-topbar">

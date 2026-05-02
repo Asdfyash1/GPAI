@@ -188,6 +188,17 @@ After each PR: run `npm run lint`, `npx tsc --noEmit`, then `git_pr(action="crea
 
 ## Changelog (append-only — every session adds an entry)
 
+- **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: Try-demo carousel + Settings → Personalize tab (Tier A #6 + #7):** _PR #39._
+  - **What:** Two upstream parities at once. (1) gpai.app's Solver landing rotates demo cards rather than showing 3 static ones — Forge had a fixed grid. (2) gpai.app exposes Settings → Personalize with Occupation + Custom Instructions free-text, injected into every reply — Forge had no settings panel at all.
+  - **Carousel (`src/components/SolverView.tsx`):** expanded `QUICK_DEMOS` from 3 → 6 entries (added "Verify a step", "Quick concept refresher", "Translate a textbook problem"), turned `DemoCards` into a stateful component that advances `start` by 1 every `DEMO_ROTATION_MS` (7 s), wraps via modulo, and slices `DEMO_CARDS_PER_PAGE` (3) visible items. Hover/focus pauses rotation; dot pagination above the grid is keyboard-accessible (`role="tab"`, `aria-selected`). Each rotation triggers a `demo-card-fade-in` keyframe (320 ms) gated by `prefers-reduced-motion: reduce`.
+  - **Personalize (`src/components/SettingsModal.tsx`, new):** modal opened from a new gear button at the bottom of the sidebar (`src/components/Sidebar.tsx`, `onOpenSettings` prop). Two tabs: General (theme toggle that drives the existing `theme` state in `EducationApp`) and Personalize (Occupation: 200-char input; Custom Instructions: 10 000-char textarea; live counters; Reset button). Closes on Escape and on overlay click. Animations respect reduced motion via the existing `keyframes` system.
+  - **Persistence + plumbing:** new `src/hooks/usePersonalization.ts` reads/writes `eduforge:personalization` in `localStorage` via the same `queueMicrotask` hydrate pattern as `EducationApp`'s history persistence (avoids the `react-hooks/set-state-in-effect` lint and prevents wiping saved state on first mount). The hook returns a `request` field that is `null` when both fields are empty, so the API gets `personalization: null` and short-circuits.
+  - **Server prompt injection:** new `buildPersonalizationSuffix(personalization)` in `src/lib/prompts.ts` produces a `\n\n[USER PREFERENCES]…` block (or `""` when both fields are empty after trimming). `getSystemPrompt(mode, personalization?)` now appends this to the system prompt for **all 7 features** (Solver, Visualizer, Cheatsheet, Report Writer, PDF Notes, Notebook, Chat). The Chat path's two custom system prompts (`conversationalSystem`, `deepExplainSystem`) in `streamChatResponse` also append the suffix. Hard-capped at 200 chars (occupation) and 10 000 chars (instructions) to keep token costs predictable.
+  - **Type changes:** new `Personalization` exported from `src/types/education.ts`; both `EducationRequest` and `ChatRequest` gain optional `personalization` field. `EducationApp.tsx`, `SolverView.tsx`, `ChatView.tsx` all pass through.
+  - **API routes:** `src/app/api/educate/route.ts`, `src/app/api/educate/stream/route.ts`, `src/app/api/chat/route.ts` forward `body.personalization` into the orchestrator/chat handle. No new env var, no new dependency.
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean (after refactoring the hydrate effect to mirror `EducationApp`'s `queueMicrotask` pattern), `npm run build` clean.
+  - **What's next in this session:** Tier A #4 (Quiz panel) and Tier A #5 (Follow-up chips) remain. Tier A #3 (inline glossary) is the largest of the tier and ships last.
+
 - **2026-05-02 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee) — feature: CrossCheckBadge avatar polish + shared ModelAvatars (Tier A #2):** _new PR._
   - **What:** the `CrossCheckBadge` had 5 states with text-only labels; gpai.app shows the same badge with two overlapping avatar circles whose colours/initials identify the verifier pair (e.g. Llama-blue `L` overlapping Nemotron-green `N`). The composer's `Cross-check with <verifier>` pill (added in PR #37) was also text-only.
   - **How:** new `src/components/ModelAvatars.tsx` exporting `modelDisplay(model)` (returns `{initial, short, bg}` for 8 model families: Nemotron green, Mistral orange, DeepSeek blue, Llama Facebook-blue, Gemini Google-blue, OpenAI green, Demo grey, fallback slate) and `<ModelAvatars primary secondary size />` (overlapping circles with white border). `CrossCheckBadge` in `SolverView.tsx` now renders the avatar pair before the icon + label and tooltips name both models. Composer's pill and dropdown subheads now embed `<ModelAvatars size={14|16} />` after `Cross-check with`.
@@ -376,12 +387,41 @@ Effort scale: XS = <½ day · S = ½–1 day · M = 1–2 days · L = 2–5 days
    "List key concepts", "Give similar practice", "Explain in English") to fire
    pre-canned prompts to `/api/chat` with the current Solver problem + answer
    as system context. Render the response as a chat thread on the right rail.
-6. **Try-demo carousel cards** on Solver landing *(XS)* — 3 rotating example
-   cards with title + prompt; clicking prefills the composer. Pure UI.
-7. **Settings → Personalize** *(S)* — New tab with Occupation (200 chars) and
-   Custom Instructions (10 000 chars) text fields. Inject into Solver / AI
-   Chat system prompts. Persist to localStorage (or to user account if we
-   ever add real auth).
+6. ~~**Try-demo carousel cards** on Solver landing *(XS)*~~ — **DONE
+   (2026-05-02)**. PR #39 expanded `QUICK_DEMOS` from 3 → 6 cards (added
+   "Verify a step", "Quick concept refresher", "Translate a textbook
+   problem") and turned the static grid into a rotating carousel: visible
+   3 cards advance one slot every 7 s, wrap-around is seamless via modulo
+   indexing, hover/focus pauses rotation, dot pagination above the grid
+   lets users jump pages. Cards fade-in on each rotation
+   (`prefers-reduced-motion` respected). All in `SolverView.tsx`
+   `DemoCards`; CSS in `globals.css` `quick-section-head` /
+   `demo-dots` / `demo-card-anim`.
+7. ~~**Settings → Personalize** *(S)*~~ — **DONE (2026-05-02)**. PR #39
+   shipped a full Settings modal triggered from a new gear button at the
+   bottom of the sidebar. Tabs: General (theme toggle) and Personalize
+   (Occupation, 200-char text input + Custom Instructions, 10 000-char
+   textarea, both with live char counters and a Reset button). Values
+   persist to `localStorage` (`eduforge:personalization`) via a shared
+   `usePersonalization()` hook. Empty fields are not sent over the wire;
+   when at least one field is non-empty, the API request gains a
+   `personalization: { occupation, customInstructions }` field. Server
+   side, `getSystemPrompt()` and `streamChatResponse()` both call a new
+   `buildPersonalizationSuffix()` that appends a `[USER PREFERENCES]`
+   block to the system prompt — applied to **all 7 features** (Solver,
+   Chat, Visualizer, Cheatsheet, Report Writer, PDF Notes, Notebook)
+   plus the chat path. Files:
+   `src/types/education.ts` (new `Personalization` type +
+   `EducationRequest.personalization` + `ChatRequest.personalization`),
+   `src/hooks/usePersonalization.ts` (new), `src/lib/prompts.ts`
+   (new helper + extended `getSystemPrompt(mode, personalization)`),
+   `src/lib/orchestrator.ts` (passes through; chat path appends),
+   `src/components/SettingsModal.tsx` (new), `src/components/Sidebar.tsx`
+   (new gear button), `src/components/EducationApp.tsx` (modal mount),
+   `src/components/SolverView.tsx` + `src/components/ChatView.tsx`
+   (request body), `src/app/api/educate/route.ts` +
+   `src/app/api/educate/stream/route.ts` + `src/app/api/chat/route.ts`
+   (forward `personalization`).
 8. ~~**`Cross-check with [model icons]` indicator** on the model selector *(XS)*~~ —
    **DONE** (2026-05-02). Two indicators added to `Composer.tsx`:
    (a) inline pill `✦ Cross-check with Nemotron 49B` (orange, low-opacity
@@ -589,22 +629,22 @@ Each of these is a small focused PR. Ship them one at a time, in order. Do
 NOT batch them together — small PRs land faster and reviewer can verify each
 gap closes cleanly.
 
-- **PR 1: Auto-titled tasks** (Tier A #1, XS) — Add an LLM follow-up call
-  that summarises the problem in ≤5 words and saves to the task store.
-  Sidebar Recent shows the title instead of the timestamp ID.
-- **PR 2: CrossCheckBadge avatar polish** (Tier A #2, S) — Add the two
-  model-avatar circles + tooltip with model names to match upstream visual.
+- ✅ **PR 1: Auto-titled tasks** (Tier A #1, XS) — **MERGED in PR #36**.
+- ✅ **PR 2: CrossCheckBadge avatar polish** (Tier A #2, S) — **MERGED in
+  PR #38**.
 - **PR 3: Quiz panel functional** (Tier A #4, S) — Pagination, MCQ feedback
   (green ✓ / red ✗ on click), auto-show Explanation, Hint button. The
   `/api/quiz` endpoint and component already exist; this is UX polish.
 - **PR 4: Follow-up chips functional** (Tier A #5, S) — Wire the four chips
   to fire pre-canned prompts to `/api/chat` with task context. Render
   response as a chat thread on the right rail.
-- **PR 5: Try-demo carousel + Personalize tab** (Tier A #6 + #7, S) — Two
-  small UI additions that can be one PR. 3 rotating Solver demo cards +
-  Settings → Personalize tab with Occupation + Custom Instructions fields.
-- **PR 6: Cross-check indicator on model selector** (Tier A #8, XS) — Add
-  the verifier-model-icon subhead under "GPAI Pro" in the model selector.
+- ✅ **PR 5: Try-demo carousel + Personalize tab** (Tier A #6 + #7, S) —
+  **OPEN AS PR #39**. Carousel rotates 6 demo cards (3 visible at a time);
+  Settings modal with Personalize tab (Occupation + Custom Instructions),
+  values persist to localStorage and are injected into every Solver/Chat
+  system prompt. Once merged, both Tier A #6 and #7 are done.
+- ✅ **PR 6: Cross-check indicator on model selector** (Tier A #8, XS) —
+  **MERGED in PR #37**.
 - **PR 7: Inline orange glossary terms** (Tier A #3, M) — Post-process
   streamed markdown with a glossary LLM pass; render as `<dfn class=
   "glossary-term">` with click-to-define tooltip. Apply to Solver, Chat,
