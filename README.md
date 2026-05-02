@@ -18,9 +18,11 @@ The app works without API keys using deterministic demo output. To enable NVIDIA
 
 ```bash
 NVIDIA_API_KEY=your_nvidia_key
-NVIDIA_SOLVER_MODEL=mistralai/mistral-large-3-675b-instruct-2512
+# Optional overrides — defaults to working models on NIM. Do NOT set these to
+# `mistralai/mistral-large-3-675b-instruct-2512`; that model is not in the
+# NVIDIA NIM catalog and every call will fail.
+NVIDIA_SOLVER_MODEL=meta/llama-3.3-70b-instruct
 NVIDIA_VERIFIER_MODEL=meta/llama-3.3-70b-instruct
-NVIDIA_MODEL_MISTRAL_LARGE=mistralai/mistral-large-3-675b-instruct-2512
 NVIDIA_MODEL_NEMOTRON=nvidia/llama-3.3-nemotron-super-49b-v1
 NVIDIA_MODEL_DEEPSEEK_FLASH=deepseek-ai/deepseek-v4-flash
 NVIDIA_MODEL_LLAMA=meta/llama-3.3-70b-instruct

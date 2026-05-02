@@ -14,9 +14,44 @@ const NVIDIA_VISION_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
  * `image_url` content shape we send below:
  * https://docs.nvidia.com/nim/vision-language-models/latest/examples/nemotron-3-nano-omni-30b-a3b-reasoning/api.html
  */
-const NVIDIA_VISION_MODEL =
-  process.env.NVIDIA_VISION_MODEL ??
+const NVIDIA_VISION_MODEL_DEFAULT =
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
+
+/**
+ * Known-broken NVIDIA_VISION_MODEL values that production deploys may still
+ * have set from older README examples. Calls to these models fail with
+ * either 404 (model doesn't exist on the hosted catalog) or HTTP 400
+ * "chat_template is not supported for Mistral tokenizers" when our
+ * Nemotron-style request body is rejected. We override these to the safe
+ * Nemotron default and log a warning rather than letting the misconfig
+ * surface as a confusing user-facing error.
+ */
+const KNOWN_BROKEN_VISION_MODELS = new Set<string>([
+  "mistralai/mistral-large-3-675b-instruct-2512",
+]);
+
+function resolveVisionModel(): string {
+  const override = process.env.NVIDIA_VISION_MODEL;
+  if (!override || override.trim() === "") return NVIDIA_VISION_MODEL_DEFAULT;
+  if (KNOWN_BROKEN_VISION_MODELS.has(override)) {
+    console.warn(
+      `[vision] NVIDIA_VISION_MODEL=${override} is a known-broken value (model not in NIM catalog or incompatible with our request shape). Falling back to ${NVIDIA_VISION_MODEL_DEFAULT}. Delete the env var in your Vercel project to silence this warning.`,
+    );
+    return NVIDIA_VISION_MODEL_DEFAULT;
+  }
+  return override;
+}
+
+const NVIDIA_VISION_MODEL = resolveVisionModel();
+
+/** Nemotron-family models accept the `chat_template_kwargs` extension to
+ *  toggle reasoning mode. Llama-Vision, Mistral, etc. reject it with
+ *  HTTP 400 "chat_template is not supported for Mistral tokenizers" or
+ *  similar, so we only send it for Nemotron models.
+ */
+function supportsChatTemplateKwargs(modelName: string): boolean {
+  return /nemotron/i.test(modelName);
+}
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
@@ -170,10 +205,14 @@ async function describeImage(asset: UploadedAsset): Promise<string> {
         temperature: 0,
         top_p: 1,
         stream: false,
-        // Skip the model's internal reasoning trace: we want a fast, direct
-        // transcription. The model still produces accurate output without it
-        // (verified end-to-end against the user's handwritten ODE image).
-        chat_template_kwargs: { enable_thinking: false },
+        // Skip the model's internal reasoning trace when the model supports
+        // it: we want a fast, direct transcription. The model still produces
+        // accurate output without it (verified end-to-end against the user's
+        // handwritten ODE image). Non-Nemotron models reject this extension
+        // with HTTP 400, so we only include it when supported.
+        ...(supportsChatTemplateKwargs(NVIDIA_VISION_MODEL)
+          ? { chat_template_kwargs: { enable_thinking: false } }
+          : {}),
       }),
     },
     VISION_TIMEOUT_MS,
