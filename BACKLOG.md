@@ -273,9 +273,19 @@ These are gpai.app gaps and outperform-opportunities that haven't been scoped in
 
 ## Next-session priority order (read this first)
 
-**Tier A #3 — Inline orange glossary terms** is the only remaining Tier A item and the next thing to ship. Everything else in Tier A (auto-titled tasks, CrossCheckBadge polish, quiz panel, follow-up chips, demo carousel, Personalize tab, cross-check indicator) is already merged and live.
+**Priority 1 — Complete Auth + Sync integration.** PR #58 landed the auth routes, Telegram storage, and login UI. But the frontend doesn't auto-save to Telegram yet, and there's no localStorage migration. These are the remaining pieces:
 
-After Tier A #3 lands, all of Tier A is done — pause and confirm with the user before starting Tier B.
+1. **Auto-save hook** — after each chat message / solve / settings change, debounce and call `/api/sync/save` with the full user state. Only when logged in.
+2. **Load on login** — after successful auth verify, call `/api/sync/load` and hydrate `history`, `chatSessions`, `responseStore`, `settings` from the returned data.
+3. **localStorage → Telegram migration wizard** — on first login, if localStorage has existing data, show "Found X chats — import them?" modal, then upload to Telegram.
+4. **Offline fallback** — if `/api/sync/save` fails (Telegram down), queue the save and retry later. Keep localStorage as cache.
+5. **Session refresh** — auto-renew JWT before 7-day expiry (check on page load, renew at 6 days).
+
+**Priority 2 — Share URLs.** `/api/share/create` + `/s/[slug]` page so users can share solves/chats via link.
+
+**Priority 3 — Remaining BACKLOG items** (telemetry, a11y, i18n, CI action, etc.)
+
+After Priority 1 lands, confirm with the user before starting Priority 2.
 
 ### Tier A #3 implementation sketch (M effort, ~1–2 day PR)
 
