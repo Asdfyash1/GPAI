@@ -196,7 +196,16 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — feat: sidebar inline rename + delete confirm (Tier D #24):** _PR pending._
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — fix(chat,ui): increase maxOutputTokens + animations + font polish:** _PR pending._
+  - **Chat response cutoff fix:** bumped `maxOutputTokens` from 4096 to 16384 in `streamChatResponse` (chat) and `streamEducationalSolverDraft` (solver) in `src/lib/orchestrator.ts`. The old 4096 cap caused mid-sentence cutoffs on long responses, especially in Deep Explain mode and complex multi-step solver answers.
+  - **CSS overflow fixes:** added `overflow-wrap: break-word`, `word-break: break-word`, and `min-width: 0` to `.assistant-content`, `.chat-bubble`, `.math-markdown`, `.problem-card`, `.answer-card`, `.solution-card`. This prevents content from overflowing its container on narrow mobile screens, which was another source of the "response cut off to half" appearance.
+  - **Animations:** chat messages fade-in + slide-up (`chat-msg-in`), solver result sections stagger fade-in (80ms delay cascade), hero sections 600ms fade-in, composer pop-in + focus-within glow ring, chat suggestions delayed fade-in, streaming cursor orange blink.
+  - **Interactive polish:** chips hover-lift + active press scale, mode tabs active press scale, send button hover glow + scale, demo cards hover shadow, recent sidebar items active press, result cards hover border + shadow.
+  - **Accessibility:** all animations and transitions are disabled under `prefers-reduced-motion: reduce`.
+  - **PR #49 merge conflict resolved:** rebased `devin/1777727531-tier-a-3-glossary` onto `main` — the conflict was in `src/app/globals.css` between PR #48's phone font bumps and PR #49's glossary popover mobile rules. Both sets of styles are kept.
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean.
+
+- **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — feat(sidebar): inline rename + delete confirm (Tier D #24):** _PR #50 (open, CI green)._
   - **Why this exists:** user requested "include bugs and fixes from BACKLOG in PRs" alongside the Tier A #3 work. Tier D #24 was the highest-value, lowest-risk single item in the backlog (XS effort, real UX win — recent items can have AI-generated auto-titles that are wrong / too long / not the user's preferred phrasing).
   - **`src/components/Sidebar.tsx`:** added `onRename` prop + an internal `editingId` / `draftTitle` state machine. Each recent row now has two icon buttons (`Pencil` and `Trash2` from `lucide-react`); clicking the pencil swaps the title `<button>` for a tightly-styled `<input>` that the row visually still looks like a row. Enter commits, Esc cancels, blur commits, double-click on the title row also opens rename. Auto-focus + select-all on entering edit mode. Delete now also runs `window.confirm()` before firing — the original implementation was single-click-destructive and frequently a thumb-mistap on phone.
   - **`src/components/EducationApp.tsx`:** new `handleRenameItem(item, newTitle)` that updates `history` AND mirrors the rename into either `chatSessions[item.id].title` or `responseStore[item.id].title` so reload reads the same title via the existing `onAddHistory` / `handleChatMessagesChange` flows. Trim and no-op guards prevent bouncing the row through unnecessary re-renders.
@@ -204,6 +213,11 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
   - **`src/components/Sidebar.tsx` empty state:** "No items yet" → "No items yet — solve a problem to see it here." (the audit's Medium-priority "Better empty states" item, addressed in passing).
   - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean.
 
+- **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — feat(solver): inline orange glossary terms (Tier A #3):** _PR #49 (open, CI green, rebased)._
+  - Orange underlined glossary terms in solver output with hover tooltip and click-to-ask-AI. Completes all of Tier A.
+
+- **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — fix(mobile): bigger phone fonts:** _PR #48 (open, CI green)._
+  - Bumped font sizes for chat bubbles, solver cards, quiz items, cheatsheet/document pages, settings, and KaTeX inside `@media (max-width: 720px)`.
 - **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — fix: scanned-PDF OCR FUNCTION_PAYLOAD_TOO_LARGE iteration 3:** _PR #46 (merged)._
   - **Why this exists:** even after PR #45 the user re-tested on phone and hit `FUNCTION_PAYLOAD_TOO_LARGE` again on `/api/chat` when uploading the 41-page scanned `C++DS.pdf`. Root cause was a separate, more dangerous bug in chat history serialization — the rasterizer cap from PR #45 was working fine for the first turn, but every subsequent turn was duplicating the previous turns' attachment dataUrls into the body.
   - **Fix #1 — chat history attachment de-bloating (`src/components/ChatView.tsx`):** when serializing `messages` for `/api/chat`, every attachment on a *non-last-user* message is now stripped down to `{name, type, size, extractedText}` — the multi-MB `dataUrl` is dropped. The chat route only re-analyzes the *last user* message's attachments anyway (see `route.ts:27` `lastUser.attachments`), so historical dataUrls are pure body bloat. Without this fix a 3 MB scanned-PDF upload doubled to 6 MB on the second turn (>Vercel 4.5 MB cap), then 9 MB, etc., and the chat would lock up after 1-2 messages until the user manually started a new chat.
