@@ -326,6 +326,12 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
+- **2026-05-03 — Devin (session d554ca628544428680e9796b95a46533) — feat: auth gate + dedicated login page:** _PR #64._
+  - **Dedicated `/login` page:** Full-page login/signup form (email → OTP → verify) replaces the modal-only flow. Centered card with Forge branding, labels, monospace OTP input, and "Use a different email" back link.
+  - **Auth guard on `/app`:** New `<AuthGuard>` wrapper component checks `/api/auth/me` on mount; redirects unauthenticated users to `/login`. Shows a loading spinner while checking.
+  - **Landing page CTAs updated:** All "Get started", "Sign in", and "Open workspace" links now point to `/login` instead of `/app`. Users must authenticate before accessing the workspace.
+  - **Files:** `src/components/LoginPage.tsx` (new), `src/components/AuthGuard.tsx` (new), `src/app/login/page.tsx` (new route), `src/app/app/page.tsx` (wrapped with AuthGuard), `src/components/LandingPage.tsx` (CTAs updated), `src/app/globals.css` (login + auth-guard CSS).
+
 - **2026-05-03 — Devin — feat: auto-save / load-on-login / migration prompt / sliding session refresh:** _PR #63._ Priority 1 (auth + sync integration) completed.
   - **`useSync` hook** (`src/hooks/useSync.ts`) — debounced auto-save. On every state change in `EducationApp`, kicks a 5s timer; on quiet, POSTs the snapshot to `/api/sync/save`. JSON-equality check skips no-op saves; serialised payload of last-successful-save is stored so failures stay dirty (implicit retry on next change). In-flight save is awaited before launching the next so two POSTs can't race on Telegram and lose data.
   - **`hydrateFromCloud` + `parseSnapshot`** — on AuthModal `onAuth` (and on cold-start when `/api/auth/me` returns a live session), GETs `/api/sync/load`, parses with `src/lib/sync.ts` (accepts current schema + the legacy `{profile, chats: [], settings}` bootstrap as "empty"), and replaces `history` / `responseStore` / `chatSessions` / `theme` when the cloud has data. Cloud is canonical for signed-in users; local stays the working set when cloud is empty.
