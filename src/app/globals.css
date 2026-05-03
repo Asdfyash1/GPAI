@@ -371,23 +371,21 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  background: var(--bg-elev);
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
-.recent-mode.mode-chat { color: #7dd3fc; }
-.recent-mode.mode-solver { color: var(--accent); }
-.recent-mode.mode-cheatsheet { color: #fbbf24; }
-.recent-mode.mode-visualizer { color: #c084fc; }
-.recent-mode.mode-report { color: #34d399; }
-.recent-mode.mode-pdf-notes { color: #f472b6; }
-.recent-mode.mode-notebook { color: #a3a3a3; }
+.recent-mode.mode-solver { color: #f97316; background: rgba(249, 115, 22, 0.13); }
+.recent-mode.mode-chat { color: #38bdf8; background: rgba(56, 189, 248, 0.13); }
+.recent-mode.mode-cheatsheet { color: #facc15; background: rgba(250, 204, 21, 0.13); }
+.recent-mode.mode-visualizer { color: #a78bfa; background: rgba(167, 139, 250, 0.13); }
+.recent-mode.mode-report { color: #34d399; background: rgba(52, 211, 153, 0.13); }
+.recent-mode.mode-pdf-notes { color: #f472b6; background: rgba(244, 114, 182, 0.13); }
+.recent-mode.mode-notebook { color: #60a5fa; background: rgba(96, 165, 250, 0.13); }
 
 .sidebar-bottom {
   display: flex;
@@ -1995,17 +1993,17 @@ a {
   gap: 5px;
   padding: 3px 10px 3px 6px;
   border-radius: 999px;
-  background: var(--bg-elev, #1e1e2e);
-  border: 1px solid var(--border, #333);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
   font-size: 12px;
-  color: var(--ink, #ccc);
+  color: var(--ink);
   text-decoration: none;
   transition: border-color 0.15s, background 0.15s;
   cursor: pointer;
 }
 .source-pill:hover {
-  border-color: var(--accent, #4f8cff);
-  background: var(--bg-hover, #252538);
+  border-color: var(--accent);
+  background: var(--bg-elev-2);
 }
 
 .source-favicon {
@@ -2799,6 +2797,27 @@ a {
 
 [data-theme="dark"] .math-markdown .katex-display {
   background: rgba(255, 255, 255, 0.02);
+}
+
+[data-theme="light"] .katex {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .math-markdown .katex-display {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .settings-overlay {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="light"] .settings-dialog {
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .mermaid-error {
+  background: rgba(0, 0, 0, 0.03);
 }
 
 /* ===========  GLOSSARY TERMS (Tier A #3) ============ */
