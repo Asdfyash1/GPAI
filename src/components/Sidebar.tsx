@@ -5,9 +5,11 @@ import {
   PanelLeftClose,
   PanelLeft,
   ChevronRight,
+  Pencil,
   Trash2,
   Settings,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { FeatureMode } from "@/types/education";
 import { MODES } from "@/components/ModeTabs";
 
@@ -44,6 +46,14 @@ type SidebarProps = {
   activeItemId?: string;
   onSelect: (item: SidebarItem) => void;
   onDelete?: (item: SidebarItem) => void;
+  /**
+   * Inline-rename a recent item. The Sidebar handles the editable
+   * `<input>` itself (open / commit / cancel) and only calls this
+   * with the trimmed final title once the user confirms; the host
+   * just persists the change. If absent, the rename affordance is
+   * hidden entirely.
+   */
+  onRename?: (item: SidebarItem, newTitle: string) => void;
   onNewTask: () => void;
   onOpenSettings?: () => void;
   userLabel?: string;
@@ -59,10 +69,47 @@ export function Sidebar({
   activeItemId,
   onSelect,
   onDelete,
+  onRename,
   onNewTask,
   onOpenSettings,
   userLabel = "Guest",
 }: SidebarProps) {
+  // ID of the recent item currently in inline-edit mode (one at a
+  // time). When non-null the row swaps out the title `<button>` for
+  // an `<input>`. We mirror the input value into local state so the
+  // user can cancel without mutating `items`.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Auto-focus + select-all when entering edit mode so the user can
+  // immediately overtype or move the caret.
+  useEffect(() => {
+    if (!editingId) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [editingId]);
+
+  const startRename = (item: SidebarItem) => {
+    setEditingId(item.id);
+    setDraftTitle(item.title);
+  };
+
+  const commitRename = (item: SidebarItem) => {
+    const next = draftTitle.trim();
+    setEditingId(null);
+    setDraftTitle("");
+    if (!onRename) return;
+    if (!next || next === item.title) return; // no-op
+    onRename(item, next);
+  };
+
+  const cancelRename = () => {
+    setEditingId(null);
+    setDraftTitle("");
+  };
   return (
     <aside
       className={`sidebar ${collapsed ? "is-collapsed" : ""} ${
@@ -129,40 +176,104 @@ export function Sidebar({
             </button>
           </div>
           {items.length === 0 ? (
-            <p className="recent-empty">No items yet</p>
+            <p className="recent-empty">
+              No items yet — solve a problem to see it here.
+            </p>
           ) : (
             <ul className="recent-list">
-              {items.map((item) => (
-                <li key={item.id} className="recent-row">
-                  <button
-                    type="button"
-                    className={`recent-item ${
-                      activeItemId === item.id ? "is-active" : ""
-                    }`}
-                    onClick={() => onSelect(item)}
-                    title={`${item.mode} \u2014 ${item.title}`}
-                  >
-                    <span className={`recent-mode mode-${item.mode}`}>
-                      {modeBadge(item.mode)}
-                    </span>
-                    <span className="recent-title">{item.title}</span>
-                  </button>
-                  {onDelete && (
-                    <button
-                      type="button"
-                      className="icon-button recent-delete"
-                      aria-label={`Delete ${item.title}`}
-                      title="Delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete(item);
-                      }}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </li>
-              ))}
+              {items.map((item) => {
+                const isEditing = editingId === item.id;
+                return (
+                  <li key={item.id} className="recent-row">
+                    {isEditing ? (
+                      <span
+                        className={`recent-item ${
+                          activeItemId === item.id ? "is-active" : ""
+                        } is-editing`}
+                      >
+                        <span className={`recent-mode mode-${item.mode}`}>
+                          {modeBadge(item.mode)}
+                        </span>
+                        <input
+                          ref={inputRef}
+                          className="recent-title-input"
+                          type="text"
+                          value={draftTitle}
+                          onChange={(e) => setDraftTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              commitRename(item);
+                            } else if (e.key === "Escape") {
+                              e.preventDefault();
+                              cancelRename();
+                            }
+                          }}
+                          onBlur={() => commitRename(item)}
+                          maxLength={120}
+                          aria-label={`Rename ${item.title}`}
+                        />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className={`recent-item ${
+                          activeItemId === item.id ? "is-active" : ""
+                        }`}
+                        onClick={() => onSelect(item)}
+                        onDoubleClick={(e) => {
+                          if (!onRename) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          startRename(item);
+                        }}
+                        title={`${item.mode} \u2014 ${item.title}`}
+                      >
+                        <span className={`recent-mode mode-${item.mode}`}>
+                          {modeBadge(item.mode)}
+                        </span>
+                        <span className="recent-title">{item.title}</span>
+                      </button>
+                    )}
+                    {!isEditing && onRename && (
+                      <button
+                        type="button"
+                        className="icon-button recent-rename"
+                        aria-label={`Rename ${item.title}`}
+                        title="Rename"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRename(item);
+                        }}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    )}
+                    {!isEditing && onDelete && (
+                      <button
+                        type="button"
+                        className="icon-button recent-delete"
+                        aria-label={`Delete ${item.title}`}
+                        title="Delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (
+                            typeof window !== "undefined" &&
+                            !window.confirm(
+                              `Delete "${item.title}"? This can't be undone.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          onDelete(item);
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

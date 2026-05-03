@@ -196,6 +196,14 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
+- **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — feat: sidebar inline rename + delete confirm (Tier D #24):** _PR pending._
+  - **Why this exists:** user requested "include bugs and fixes from BACKLOG in PRs" alongside the Tier A #3 work. Tier D #24 was the highest-value, lowest-risk single item in the backlog (XS effort, real UX win — recent items can have AI-generated auto-titles that are wrong / too long / not the user's preferred phrasing).
+  - **`src/components/Sidebar.tsx`:** added `onRename` prop + an internal `editingId` / `draftTitle` state machine. Each recent row now has two icon buttons (`Pencil` and `Trash2` from `lucide-react`); clicking the pencil swaps the title `<button>` for a tightly-styled `<input>` that the row visually still looks like a row. Enter commits, Esc cancels, blur commits, double-click on the title row also opens rename. Auto-focus + select-all on entering edit mode. Delete now also runs `window.confirm()` before firing — the original implementation was single-click-destructive and frequently a thumb-mistap on phone.
+  - **`src/components/EducationApp.tsx`:** new `handleRenameItem(item, newTitle)` that updates `history` AND mirrors the rename into either `chatSessions[item.id].title` or `responseStore[item.id].title` so reload reads the same title via the existing `onAddHistory` / `handleChatMessagesChange` flows. Trim and no-op guards prevent bouncing the row through unnecessary re-renders.
+  - **`src/app/globals.css`:** added `.recent-row .recent-rename` mirror of the existing `.recent-row .recent-delete` opacity-on-hover pattern, plus a borderless `.recent-title-input` styled to fit the same row height/padding as the static `.recent-title` so the layout doesn't jiggle on edit-mode toggle. Inside `@media (max-width: 720px)` the rename + delete buttons are pinned to `opacity: 0.55` (full opacity on `:active`) since hover doesn't fire reliably on touch.
+  - **`src/components/Sidebar.tsx` empty state:** "No items yet" → "No items yet — solve a problem to see it here." (the audit's Medium-priority "Better empty states" item, addressed in passing).
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean.
+
 - **2026-05-02 — Devin (session 5214b77f0cd5413ab106417b269a2a2c) — fix: scanned-PDF OCR FUNCTION_PAYLOAD_TOO_LARGE iteration 3:** _PR #46 (merged)._
   - **Why this exists:** even after PR #45 the user re-tested on phone and hit `FUNCTION_PAYLOAD_TOO_LARGE` again on `/api/chat` when uploading the 41-page scanned `C++DS.pdf`. Root cause was a separate, more dangerous bug in chat history serialization — the rasterizer cap from PR #45 was working fine for the first turn, but every subsequent turn was duplicating the previous turns' attachment dataUrls into the body.
   - **Fix #1 — chat history attachment de-bloating (`src/components/ChatView.tsx`):** when serializing `messages` for `/api/chat`, every attachment on a *non-last-user* message is now stripped down to `{name, type, size, extractedText}` — the multi-MB `dataUrl` is dropped. The chat route only re-analyzes the *last user* message's attachments anyway (see `route.ts:27` `lastUser.attachments`), so historical dataUrls are pure body bloat. Without this fix a 3 MB scanned-PDF upload doubled to 6 MB on the second turn (>Vercel 4.5 MB cap), then 9 MB, etc., and the chat would lock up after 1-2 messages until the user manually started a new chat.
@@ -610,8 +618,13 @@ Effort scale: XS = <½ day · S = ½–1 day · M = 1–2 days · L = 2–5 days
     examples below the composer with lightbox preview + Download button.
 23. **`Send feedback`** orange button (BETA features only) *(XS)* — opens a
     small form modal that POSTs to a feedback endpoint.
-24. **Sidebar Recent rename/delete per item** *(XS)* — Hover state shows `…`
-    menu with Rename / Delete.
+24. **Sidebar Recent rename/delete per item** *(XS)* — ✅ shipped 2026-05-02.
+    Hover (desktop) / always-visible-at-low-opacity (phone) shows pencil and
+    trash icons next to each row. Pencil opens an inline rename input
+    (Enter commits, Esc cancels, blur commits, double-click on title also
+    opens rename); trash uses `window.confirm()` to prevent accidental loss.
+    Rename mirrors into both `chatSessions[id].title` and
+    `responseStore[id].title` so the title persists across reloads.
 
 ### Observed quirks / model-API notes for next session
 

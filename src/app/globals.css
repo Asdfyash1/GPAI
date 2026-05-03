@@ -290,6 +290,7 @@ a {
   gap: 4px;
 }
 
+.recent-row .recent-rename,
 .recent-row .recent-delete {
   opacity: 0;
   transition: opacity 120ms ease, background 120ms ease;
@@ -299,14 +300,39 @@ a {
   color: var(--muted);
 }
 
+.recent-row:hover .recent-rename,
+.recent-row:focus-within .recent-rename,
 .recent-row:hover .recent-delete,
 .recent-row:focus-within .recent-delete {
   opacity: 1;
 }
 
+.recent-row .recent-rename:hover,
 .recent-row .recent-delete:hover {
   background: var(--bg-elev);
   color: var(--ink);
+}
+
+/* Inline rename: the row swaps in a borderless input that fills the
+   same slot as `.recent-title`. We keep the same height + padding +
+   font so the layout doesn't jiggle on enter/exit of edit mode. */
+.recent-item.is-editing {
+  cursor: text;
+}
+.recent-title-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: -3px -7px;
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+.recent-title-input:focus {
+  background: var(--bg-elev);
 }
 
 .recent-item {
@@ -3070,6 +3096,20 @@ a {
   .sidebar-mode-row,
   .recent-item {
     touch-action: manipulation;
+  }
+
+  /* On touch devices `:hover` doesn't fire reliably, so the
+   * desktop pattern of "show row controls only on hover" hides the
+   * rename / delete affordances permanently. Keep them always
+   * visible (but at lower opacity) on phones so users can actually
+   * find them. */
+  .recent-row .recent-rename,
+  .recent-row .recent-delete {
+    opacity: 0.55;
+  }
+  .recent-row .recent-rename:active,
+  .recent-row .recent-delete:active {
+    opacity: 1;
   }
 
   /* ── Settings nav becomes a horizontal tab strip on phone (instead
