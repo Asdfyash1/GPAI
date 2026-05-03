@@ -1,5 +1,10 @@
+import { AuthGuard } from "@/components/AuthGuard";
 import { EducationApp } from "@/components/EducationApp";
 
 export default function AppPage() {
-  return <EducationApp />;
+  return (
+    <AuthGuard>
+      <EducationApp />
+    </AuthGuard>
+  );
 }

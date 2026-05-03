@@ -87,10 +87,10 @@ export function LandingPage() {
           <a href="#why">Why Forge</a>
         </nav>
         <div className="landing-nav-cta">
-          <Link href="/app?auth=open" className="landing-link-quiet">
+          <Link href="/login" className="landing-link-quiet">
             Sign in
           </Link>
-          <Link href="/app" className="landing-cta landing-cta-primary">
+          <Link href="/login" className="landing-cta landing-cta-primary">
             Get started
             <ArrowRight size={16} />
           </Link>
@@ -113,11 +113,11 @@ export function LandingPage() {
               solution, a diagram, a cheatsheet, and a quiz — without juggling tabs.
             </p>
             <div className="landing-hero-cta">
-              <Link href="/app" className="landing-cta landing-cta-primary landing-cta-large">
-                Try it free
+              <Link href="/login" className="landing-cta landing-cta-primary landing-cta-large">
+                Get started free
                 <ArrowRight size={18} />
               </Link>
-              <Link href="/app?auth=open" className="landing-cta landing-cta-ghost landing-cta-large">
+              <Link href="/login" className="landing-cta landing-cta-ghost landing-cta-large">
                 Sign in
               </Link>
             </div>
@@ -231,11 +231,11 @@ export function LandingPage() {
                 </li>
               </ul>
               <div className="landing-why-cta">
-                <Link href="/app" className="landing-cta landing-cta-primary landing-cta-large">
-                  Open the workspace
+                <Link href="/login" className="landing-cta landing-cta-primary landing-cta-large">
+                  Get started
                   <ArrowRight size={18} />
                 </Link>
-                <Link href="/app?auth=open" className="landing-link-quiet">
+                <Link href="/login" className="landing-link-quiet">
                   Already have an account? Sign in
                 </Link>
               </div>
@@ -254,7 +254,7 @@ export function LandingPage() {
           </Link>
           <p className="landing-footer-tag">A learner&rsquo;s workspace for STEM and beyond.</p>
           <div className="landing-footer-links">
-            <Link href="/app">Open workspace</Link>
+            <Link href="/login">Get started</Link>
             <a href="#features">Features</a>
             <a href="#how-it-works">How it works</a>
           </div>

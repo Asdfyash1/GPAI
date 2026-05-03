@@ -321,6 +321,12 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
+- **2026-05-03 — Devin (session d554ca628544428680e9796b95a46533) — feat: auth gate + dedicated login page:** _PR #62._
+  - **Dedicated `/login` page:** Full-page login/signup form (email → OTP → verify) replaces the modal-only flow. Centered card with Forge branding, labels, monospace OTP input, and "Use a different email" back link.
+  - **Auth guard on `/app`:** New `<AuthGuard>` wrapper component checks `/api/auth/me` on mount; redirects unauthenticated users to `/login`. Shows a loading spinner while checking.
+  - **Landing page CTAs updated:** All "Get started", "Sign in", and "Open workspace" links now point to `/login` instead of `/app`. Users must authenticate before accessing the workspace.
+  - **Files:** `src/components/LoginPage.tsx` (new), `src/components/AuthGuard.tsx` (new), `src/app/login/page.tsx` (new route), `src/app/app/page.tsx` (wrapped with AuthGuard), `src/components/LandingPage.tsx` (CTAs updated), `src/app/globals.css` (login + auth-guard CSS).
+
 - **2026-05-03 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee resumed) — feat: public landing page at "/" + workspace moves to "/app":** _PR #60._
   - New `<LandingPage />` rendered at `/` — sticky translucent nav, hero with `--accent`-highlighted headline + dual CTAs + bullet reassurances + a static illustrative "sample Solver" card on the right (problem bubble → answer line → cross-check pills → quiz line; markup-only, no fake interactivity).
   - 6-feature card grid (`AI Solver`, `AI Chat`, `AI Visualizer`, `Cheatsheet Builder`, `Debate Mode`, `YouTube Ingestion`), 3-step "How it works", 3-pillar "Why Forge" with closing CTA pair, minimal footer.
