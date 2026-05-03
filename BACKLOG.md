@@ -116,7 +116,7 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 
 ## Low priority / nice-to-have
 
-- [ ] **Auth + storage via Telegram Bot API.** See detailed plan in "Telegram Auth + Storage Plan" section below.
+- [x] **Auth + storage via Telegram Bot API.** Email OTP signup/login + JWT sessions + Telegram channel storage. _PR #58._
 - ~~**Server-side history sync.**~~ Covered by Telegram storage plan below.
 - [x] **Model picker UX.** Composer shows a pill labelled "Auto" today; clicking it should open a model picker with cost/quality stats per model. _Added debate mode option + all existing models. PR #55._
 - [ ] **Telemetry.** Add anonymous usage events so we can see which modes get used.
@@ -309,7 +309,17 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — docs: Telegram auth + storage plan:** _PR #57._
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — feat: email auth + Telegram storage:** _PR #58._
+  - **Auth routes:** `/api/auth/signup`, `/api/auth/login` (send OTP via Resend), `/api/auth/verify` (check OTP, create JWT), `/api/auth/me` (session check), `/api/auth/logout` (clear cookie).
+  - **Sync routes:** `/api/sync/save` (upload user data to Telegram topic), `/api/sync/load` (download from Telegram).
+  - **Telegram helper:** `src/lib/telegram.ts` — registry (pinned message in channel), per-user topics, file upload/download via `getFile`.
+  - **Auth helper:** `src/lib/auth.ts` — JWT via `jose`, in-memory OTP store with 5-min TTL and rate limiting.
+  - **Email helper:** `src/lib/email.ts` — sends branded OTP email via Resend.
+  - **Auth modal UI:** `AuthModal.tsx` — email input → send code → OTP input → verify. Clean animated modal.
+  - **Topbar integration:** Sign In button (orange) when logged out, email + avatar + logout when logged in.
+  - **Env vars required:** `TELEGRAM_BOT_TOKENS`, `TELEGRAM_CHANNEL_ID`, `JWT_SECRET`, `RESEND_API_KEY`.
+
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — docs: Telegram auth + storage plan:** _PR #57 (merged)._
   - Added full "Telegram Auth + Storage Plan" section to BACKLOG with architecture, data structure, API routes, frontend pages, multi-bot load balancing, reliability edge cases, and implementation order.
   - Waiting for owner to provide: bot token(s), channel ID, email service decision, JWT secret.
 
