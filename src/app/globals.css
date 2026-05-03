@@ -1391,6 +1391,45 @@ a {
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 
+.step-reveal-item {
+  animation: step-fade-in 0.3s ease both;
+}
+.step-reveal-item + .step-reveal-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line, #333);
+}
+@keyframes step-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.step-reveal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 16px;
+  background: var(--accent, #f97316);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.step-reveal-btn:hover {
+  opacity: 0.85;
+}
+.step-reveal-collapse {
+  background: var(--bg-elev, #1e293b);
+  color: var(--ink-faint, #888);
+  border: 1px solid var(--line, #333);
+}
+.step-reveal-collapse:hover {
+  color: var(--ink, #ccc);
+}
+
 .problem-card:hover,
 .answer-card:hover,
 .solution-card:hover {
@@ -1961,6 +2000,40 @@ a {
 
 .chat-row-assistant {
   justify-content: flex-start;
+}
+
+.chat-response-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 4px;
+  font-size: 11px;
+  color: var(--ink-faint, #888);
+}
+
+.response-time {
+  opacity: 0.7;
+}
+
+.regenerate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid var(--line, #333);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--ink-faint, #888);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.regenerate-btn:hover {
+  color: var(--accent, #f97316);
+  border-color: var(--accent, #f97316);
+}
+.regenerate-btn svg {
+  flex-shrink: 0;
 }
 
 @keyframes chat-msg-in {

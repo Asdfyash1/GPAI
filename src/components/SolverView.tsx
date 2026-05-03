@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  RefreshCw,
   XCircle,
   Download,
   Eye,
@@ -171,6 +172,8 @@ function FollowUpCopyButton({ text }: { text: string }) {
 export function SolverView(props: SolverViewProps) {
   const [crossCheck, setCrossCheck] = useState(true);
   const [streamText, setStreamText] = useState("");
+  const [solveTime, setSolveTime] = useState<number | null>(null);
+  const solveStartRef = useRef<number>(0);
   const stream = useStream<EducationResponse>();
   const personalization = usePersonalization();
 
@@ -179,6 +182,8 @@ export function SolverView(props: SolverViewProps) {
     if (!finalPrompt) return;
     props.setResult(null);
     setStreamText("");
+    setSolveTime(null);
+    solveStartRef.current = performance.now();
     stream.start(
       "/api/educate/stream",
       {
@@ -194,6 +199,8 @@ export function SolverView(props: SolverViewProps) {
       {
         onChunk: (visible) => setStreamText(visible),
         onFinal: (_text, structured) => {
+          const elapsed = (performance.now() - solveStartRef.current) / 1000;
+          setSolveTime(Math.round(elapsed * 10) / 10);
           if (structured) {
             props.setResult(structured);
             props.onAddHistory(structured);
@@ -244,10 +251,95 @@ export function SolverView(props: SolverViewProps) {
             setStreamText("");
             stream.reset();
           }}
+          solveTime={solveTime}
         />
       )}
     </div>
   );
+}
+
+/**
+ * Splits the solution text into numbered steps and reveals them one at a
+ * time with a "Show next step" button. If the text doesn't contain clear
+ * numbered steps, it falls back to showing the full content.
+ */
+function StepByStepReveal({
+  content,
+  glossary,
+  onAskGlossary,
+}: {
+  content: string;
+  glossary?: GlossaryEntry[];
+  onAskGlossary?: (entry: GlossaryEntry) => void;
+}) {
+  const steps = splitIntoSteps(content);
+  const [visibleCount, setVisibleCount] = useState(1);
+  const [lastStreamKey, setLastStreamKey] = useState(content.slice(0, 20));
+
+  // Reset when content changes substantially (new solve)
+  const streamKey = content.slice(0, 20);
+  if (streamKey !== lastStreamKey) {
+    setLastStreamKey(streamKey);
+    setVisibleCount(1);
+  }
+
+  if (steps.length <= 1) {
+    return (
+      <MathMarkdown content={content} glossary={glossary} onAskGlossary={onAskGlossary} />
+    );
+  }
+
+  return (
+    <div className="step-reveal">
+      {steps.slice(0, visibleCount).map((step, i) => (
+        <div key={i} className="step-reveal-item" style={{ animationDelay: `${i * 60}ms` }}>
+          <MathMarkdown content={step} glossary={glossary} onAskGlossary={onAskGlossary} />
+        </div>
+      ))}
+      {visibleCount < steps.length && (
+        <button
+          type="button"
+          className="step-reveal-btn"
+          onClick={() => setVisibleCount((c) => c + 1)}
+        >
+          <Eye size={14} />
+          <span>Show next step ({visibleCount}/{steps.length})</span>
+        </button>
+      )}
+      {visibleCount >= steps.length && visibleCount > 1 && (
+        <button
+          type="button"
+          className="step-reveal-btn step-reveal-collapse"
+          onClick={() => setVisibleCount(1)}
+        >
+          <EyeOff size={14} />
+          <span>Collapse steps</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function splitIntoSteps(text: string): string[] {
+  // Split on lines starting with numbered patterns like "1.", "**1.**", "### Step 1", etc.
+  const lines = text.split("\n");
+  const steps: string[] = [];
+  let current = "";
+
+  for (const line of lines) {
+    const isStepStart = /^(?:\*{0,2}\d+[.)]\*{0,2}\s|#{1,3}\s*(?:Step|Part)\s+\d)/i.test(line.trimStart());
+    if (isStepStart && current.trim()) {
+      steps.push(current.trim());
+      current = line + "\n";
+    } else {
+      current += line + "\n";
+    }
+  }
+  if (current.trim()) {
+    steps.push(current.trim());
+  }
+
+  return steps;
 }
 
 function SolverHero() {
@@ -354,6 +446,7 @@ function SolverResult({
   onAddHistory,
   onRetry,
   onClearError,
+  solveTime,
 }: {
   streamText: string;
   isStreaming: boolean;
@@ -365,6 +458,7 @@ function SolverResult({
   onAddHistory: (r: EducationResponse) => void;
   onRetry: () => void;
   onClearError: () => void;
+  solveTime: number | null;
 }) {
   const [tab, setTab] = useState<"followups" | "quiz">("followups");
   const [chatInput, setChatInput] = useState("");
@@ -563,11 +657,26 @@ function SolverResult({
               <span>{new Date(result.createdAt).toLocaleDateString()}</span>
               <span>·</span>
               <span>{new Date(result.createdAt).toLocaleTimeString()}</span>
+              {solveTime !== null && (
+                <>
+                  <span>·</span>
+                  <span className="response-time">Solved in {solveTime}s</span>
+                </>
+              )}
               <div className="result-actions">
                 <button className="icon-button" type="button" aria-label="Download">
                   <Download size={16} />
                 </button>
                 <ShareButton id={result.id} title={result.title} />
+                <button
+                  className="regenerate-btn"
+                  type="button"
+                  onClick={onRetry}
+                  title="Regenerate solution"
+                >
+                  <RefreshCw size={13} />
+                  <span>Regenerate</span>
+                </button>
               </div>
             </div>
           </header>
@@ -618,7 +727,7 @@ function SolverResult({
             {error ? (
               <p className="error-text">{error}</p>
             ) : text ? (
-              <MathMarkdown
+              <StepByStepReveal
                 content={text}
                 glossary={result?.glossary}
                 onAskGlossary={askGlossary}
