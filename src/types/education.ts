@@ -22,6 +22,7 @@ export type ModelChoice =
   | "nemotron"
   | "deepseek-flash"
   | "llama"
+  | "debate"
   | "demo";
 
 export type FrameRatio = "16:9" | "4:3" | "1:1" | "a4-portrait" | "a4-landscape";

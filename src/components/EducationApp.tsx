@@ -20,6 +20,7 @@ import { DocumentView } from "@/components/DocumentView";
 import { NotebookView } from "@/components/NotebookView";
 import { PdfNotesView } from "@/components/PdfNotesView";
 import { SettingsModal } from "@/components/SettingsModal";
+import { OnboardingTour } from "@/components/OnboardingTour";
 
 type Theme = "dark" | "light";
 
@@ -472,6 +473,7 @@ export function EducationApp() {
           )}
         </div>
       </main>
+      <OnboardingTour />
     </div>
   );
 }

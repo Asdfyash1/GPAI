@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { RefreshCw } from "lucide-react";
 import type {
   ChatMessage,
   ModelChoice,
@@ -68,6 +69,8 @@ export function ChatView({
   const [deepExplain, setDeepExplain] = useState(false);
   const [webEnabled, setWebEnabled] = useState(false);
   const [streamText, setStreamText] = useState("");
+  const [responseTime, setResponseTime] = useState<number | null>(null);
+  const streamStartRef = useRef<number>(0);
   const stream = useStream();
   const personalization = usePersonalization();
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -93,6 +96,67 @@ export function ChatView({
     setInput("");
     setAttachments([]);
     setStreamText("");
+    setResponseTime(null);
+    streamStartRef.current = performance.now();
+
+    // Debate mode: POST to /api/debate, format result as structured markdown
+    if (modelChoice === "debate") {
+      (async () => {
+        try {
+          const res = await fetch("/api/debate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: content }),
+          });
+          const elapsed = (performance.now() - streamStartRef.current) / 1000;
+          setResponseTime(Math.round(elapsed * 10) / 10);
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: "Debate failed" }));
+            onMessagesChange([
+              ...next,
+              {
+                id: `e_${Date.now()}`,
+                role: "assistant",
+                content: `Something went wrong: ${(err as { error?: string }).error ?? "Unknown error"}`,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+            return;
+          }
+          const data = await res.json() as {
+            entries: Array<{ label: string; response: string; durationMs: number }>;
+            judge: { winner: string; reasoning: string };
+          };
+          let md = `## Debate Results\n\n`;
+          for (const e of data.entries) {
+            const isWinner = e.label === data.judge.winner;
+            md += `### ${e.label}${isWinner ? " 🏆" : ""} *(${(e.durationMs / 1000).toFixed(1)}s)*\n\n`;
+            md += `${e.response}\n\n---\n\n`;
+          }
+          md += `**Judge's verdict:** ${data.judge.winner} wins — ${data.judge.reasoning}`;
+          onMessagesChange([
+            ...next,
+            {
+              id: `a_${Date.now()}`,
+              role: "assistant",
+              content: md,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        } catch (err) {
+          onMessagesChange([
+            ...next,
+            {
+              id: `e_${Date.now()}`,
+              role: "assistant",
+              content: `Debate failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      })();
+      return;
+    }
 
     // Strip raw `dataUrl` (base64) bytes from every attachment that
     // belongs to a previous turn. The server only re-analyzes the
@@ -143,6 +207,8 @@ export function ChatView({
       {
         onChunk: (textSoFar) => setStreamText(textSoFar),
         onFinal: (finalText) => {
+          const elapsed = (performance.now() - streamStartRef.current) / 1000;
+          setResponseTime(Math.round(elapsed * 10) / 10);
           onMessagesChange([
             ...next,
             {
@@ -175,6 +241,90 @@ export function ChatView({
     );
   };
 
+  const regenerate = useCallback(() => {
+    if (messages.length < 2) return;
+    const lastAssistantIdx = messages.reduce(
+      (acc, m, i) => (m.role === "assistant" ? i : acc),
+      -1,
+    );
+    if (lastAssistantIdx < 0) return;
+    const withoutLast = messages.slice(0, lastAssistantIdx);
+    onMessagesChange(withoutLast);
+    const lastUserMsg = [...withoutLast].reverse().find((m) => m.role === "user");
+    if (lastUserMsg) {
+      setStreamText("");
+      setResponseTime(null);
+      streamStartRef.current = performance.now();
+      const lastUserIdx = withoutLast.reduce(
+        (acc, m, i) => (m.role === "user" ? i : acc),
+        -1,
+      );
+      const wireMessages = withoutLast.map((m, i) => {
+        const baseContent =
+          m.role === "assistant" ? extractSources(m.content).content : m.content;
+        if (!m.attachments || m.attachments.length === 0) {
+          return { role: m.role, content: baseContent };
+        }
+        const isLastUser = i === lastUserIdx;
+        const stripped = m.attachments.map((a) =>
+          isLastUser
+            ? a
+            : {
+                name: a.name,
+                type: a.type,
+                size: a.size,
+                extractedText: a.extractedText,
+              },
+        );
+        return { role: m.role, content: baseContent, attachments: stripped };
+      });
+      stream.start(
+        "/api/chat",
+        {
+          messages: wireMessages,
+          modelChoice,
+          deepExplain,
+          webEnabled,
+          personalization: personalization.request,
+        },
+        {
+          onChunk: (textSoFar) => setStreamText(textSoFar),
+          onFinal: (finalText) => {
+            const elapsed = (performance.now() - streamStartRef.current) / 1000;
+            setResponseTime(Math.round(elapsed * 10) / 10);
+            onMessagesChange([
+              ...withoutLast,
+              {
+                id: `a_${Date.now()}`,
+                role: "assistant",
+                content: finalText,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+            setStreamText("");
+          },
+          onError: (msg) => {
+            const friendly =
+              msg.includes("429") || msg.includes("rate")
+                ? "The model is busy right now \u2014 please try again in a moment."
+                : msg.includes("5") && msg.match(/\b5\d{2}\b/)
+                  ? "We couldn\u2019t reach the model \u2014 please try again."
+                  : `Something went wrong: ${msg}`;
+            onMessagesChange([
+              ...withoutLast,
+              {
+                id: `e_${Date.now()}`,
+                role: "assistant",
+                content: friendly,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+          },
+        },
+      );
+    }
+  }, [messages, onMessagesChange, modelChoice, deepExplain, webEnabled, personalization.request, stream]);
+
   const empty = messages.length === 0 && !stream.isStreaming;
 
   return (
@@ -200,6 +350,22 @@ export function ChatView({
             <AssistantBlock content={streamText} streaming />
           )}
           {stream.isStreaming && !streamText && <ThinkingDots />}
+          {!stream.isStreaming && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && (
+            <div className="chat-response-meta">
+              {responseTime !== null && (
+                <span className="response-time">Answered in {responseTime}s</span>
+              )}
+              <button
+                type="button"
+                className="regenerate-btn"
+                onClick={regenerate}
+                title="Regenerate response"
+              >
+                <RefreshCw size={13} />
+                <span>Regenerate</span>
+              </button>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       )}

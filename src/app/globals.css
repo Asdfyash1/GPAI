@@ -1391,6 +1391,45 @@ a {
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 
+.step-reveal-item {
+  animation: step-fade-in 0.3s ease both;
+}
+.step-reveal-item + .step-reveal-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line, #333);
+}
+@keyframes step-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.step-reveal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 16px;
+  background: var(--accent, #f97316);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.step-reveal-btn:hover {
+  opacity: 0.85;
+}
+.step-reveal-collapse {
+  background: var(--bg-elev, #1e293b);
+  color: var(--ink-faint, #888);
+  border: 1px solid var(--line, #333);
+}
+.step-reveal-collapse:hover {
+  color: var(--ink, #ccc);
+}
+
 .problem-card:hover,
 .answer-card:hover,
 .solution-card:hover {
@@ -1961,6 +2000,40 @@ a {
 
 .chat-row-assistant {
   justify-content: flex-start;
+}
+
+.chat-response-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 4px;
+  font-size: 11px;
+  color: var(--ink-faint, #888);
+}
+
+.response-time {
+  opacity: 0.7;
+}
+
+.regenerate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid var(--line, #333);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--ink-faint, #888);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.regenerate-btn:hover {
+  color: var(--accent, #f97316);
+  border-color: var(--accent, #f97316);
+}
+.regenerate-btn svg {
+  flex-shrink: 0;
 }
 
 @keyframes chat-msg-in {
@@ -3969,4 +4042,119 @@ a {
 .followup-copy-btn.is-copied {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* ── Onboarding Tour ─────────────────────────────── */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 0.3s ease;
+}
+.onboarding-card {
+  position: relative;
+  width: 90%;
+  max-width: 420px;
+  padding: 36px 28px 24px;
+  background: var(--panel, #1e293b);
+  border: 1px solid var(--line, #333);
+  border-radius: 20px;
+  text-align: center;
+  animation: pop-in 0.3s ease;
+}
+.onboarding-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--ink-faint, #888);
+  cursor: pointer;
+  padding: 4px;
+}
+.onboarding-close:hover {
+  color: var(--ink, #ccc);
+}
+.onboarding-icon {
+  margin-bottom: 12px;
+}
+.onboarding-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--ink, #f5f5f5);
+}
+.onboarding-desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-muted, #aaa);
+  margin: 0 0 20px;
+}
+.onboarding-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line, #444);
+  transition: background 0.2s, transform 0.2s;
+}
+.onboarding-dot.is-active {
+  transform: scale(1.3);
+}
+.onboarding-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.onboarding-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.onboarding-btn:hover {
+  opacity: 0.85;
+}
+.onboarding-btn-next {
+  color: #fff;
+}
+.onboarding-btn-back {
+  background: var(--bg-elev, #1e293b);
+  color: var(--ink-faint, #888);
+  border: 1px solid var(--line, #333);
+}
+.onboarding-skip {
+  background: none;
+  border: none;
+  color: var(--ink-faint, #666);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.onboarding-skip:hover {
+  color: var(--ink-muted, #999);
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
 }
