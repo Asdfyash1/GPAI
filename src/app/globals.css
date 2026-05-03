@@ -1476,6 +1476,15 @@ a {
   font-size: 13.5px;
   color: var(--ink-muted);
 }
+.check-list {
+  list-style: none;
+  padding-left: 0;
+}
+.check-list li::before {
+  content: "\2713  ";
+  color: var(--success, #22c55e);
+  font-weight: 600;
+}
 
 .quiz-list {
   list-style: none;

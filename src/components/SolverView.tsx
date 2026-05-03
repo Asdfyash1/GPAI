@@ -630,6 +630,23 @@ function SolverResult({
           </div>
         </section>
 
+        {result?.keyConcepts && result.keyConcepts.length > 0 && (
+          <section className="result-section">
+            <h2 className="section-heading">Key concepts</h2>
+            <ul className="bullet-list">
+              {result.keyConcepts.map((c, i) => (
+                <li key={i}>
+                  <MathMarkdown
+                    content={c}
+                    glossary={result.glossary}
+                    onAskGlossary={askGlossary}
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {result?.commonMistakes && result.commonMistakes.length > 0 && (
           <section className="result-section">
             <h2 className="section-heading">Common mistakes</h2>
@@ -641,6 +658,19 @@ function SolverResult({
                     glossary={result.glossary}
                     onAskGlossary={askGlossary}
                   />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {result?.checks && result.checks.length > 0 && (
+          <section className="result-section">
+            <h2 className="section-heading">Verification checks</h2>
+            <ul className="bullet-list check-list">
+              {result.checks.map((c, i) => (
+                <li key={i}>
+                  <MathMarkdown content={c} />
                 </li>
               ))}
             </ul>
