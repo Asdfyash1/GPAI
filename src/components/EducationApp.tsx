@@ -145,6 +145,35 @@ export function EducationApp() {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
+  // Keyboard shortcuts: Ctrl+K → cycle mode, Ctrl+/ → toggle settings
+  useEffect(() => {
+    const MODES: FeatureMode[] = [
+      "solver",
+      "chat",
+      "cheatsheet",
+      "visualizer",
+      "report",
+      "pdf-notes",
+      "notebook",
+    ];
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === "k") {
+          e.preventDefault();
+          setMode((cur) => {
+            const idx = MODES.indexOf(cur);
+            return MODES[(idx + 1) % MODES.length];
+          });
+        } else if (e.key === "/") {
+          e.preventDefault();
+          setSettingsOpen((o) => !o);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined" || !hydrated.current) return;
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 25)));

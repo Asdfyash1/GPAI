@@ -239,6 +239,7 @@ export function SolverView(props: SolverViewProps) {
           modelChoice={props.modelChoice}
           onVisualize={props.onVisualize}
           onAddHistory={props.onAddHistory}
+          onRetry={() => handleSubmit()}
           onClearError={() => {
             setStreamText("");
             stream.reset();
@@ -351,6 +352,7 @@ function SolverResult({
   modelChoice,
   onVisualize,
   onAddHistory,
+  onRetry,
   onClearError,
 }: {
   streamText: string;
@@ -361,6 +363,7 @@ function SolverResult({
   modelChoice: ModelChoice;
   onVisualize: (prompt: string) => void;
   onAddHistory: (r: EducationResponse) => void;
+  onRetry: () => void;
   onClearError: () => void;
 }) {
   const [tab, setTab] = useState<"followups" | "quiz">("followups");
@@ -532,16 +535,25 @@ function SolverResult({
             <h2 className="section-heading">Could not solve</h2>
             <p>{error}</p>
             <p className="solver-error-hint">
-              Try a smaller image (under 4 MB), a clearer photo, or paste the
-              problem as text.
+              Try again, use a smaller image (under 4 MB), a clearer photo, or
+              paste the problem as text.
             </p>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={onClearError}
-            >
-              Back to composer
-            </button>
+            <div className="solver-error-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={onRetry}
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onClearError}
+              >
+                Back to composer
+              </button>
+            </div>
           </section>
         )}
         {result?.title && (

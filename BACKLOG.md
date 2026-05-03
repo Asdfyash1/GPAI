@@ -98,20 +98,20 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 - [ ] **Visualizer: chemistry / SMILES rendering.** Today chemistry category goes to the illustration path (Flux) only. Add SMILES → SVG via a small client-side library (e.g. SmilesDrawer) so a chem prompt can produce a real molecule diagram.
 - [x] **Cheatsheet: A4-printable density.** The Cheatsheet "Print / PDF" button used to open a popup window, write injected HTML, and fight ad-blockers. Replaced with `window.print()` plus a real `@media print` stylesheet that flips a `body[data-printing="cheatsheet"]` marker, hides every element except the `.cheatsheet-page` article, reflows it to A4 (`@page size: A4; margin: 12mm`) with `columns: 2; column-gap: 14mm; font-size: 9pt`. The `afterprint` event clears the marker so the live UI snaps back. Prompt was already tuned (`cheatsheetSystemPrompt` in `src/lib/prompts.ts`); UI gap is closed. _Files:_ `src/components/CheatsheetView.tsx` (`handlePrint`), `src/app/globals.css` (`@media print`).
 - [x] **Report Writer / PDF Notes / Notebook: structured exports.** All three views' Print/PDF buttons used to spawn a popup window, write injected HTML, and re-link KaTeX from a CDN — same anti-pattern PR #11 already fixed for the Cheatsheet. Replaced with `window.print()` + a `body[data-printing="document"]` marker and an `@media print` rule that hides everything except the `.document-page` article (Notebook reuses the same shell), reflows it to A4, forces `color: #111` and `background: transparent` on every descendant so the dark theme palette doesn't survive into the printed page, and wires `afterprint` cleanup. Print/PDF is also now disabled until the body has streamed in. _Files:_ `src/components/DocumentView.tsx`, `src/components/NotebookView.tsx`, `src/components/PdfNotesView.tsx`, `src/app/globals.css` (`@media print` `body[data-printing="document"]`).
-- [ ] **Light theme polish.** Confirm dark + light themes both look right in solver / chat / cheatsheet. Today there's a theme toggle in the topbar but several views were styled for dark only.
+- [x] **Light theme polish.** Mermaid diagrams now render with theme-appropriate colors (dark vs default). Settings overlay, KaTeX display blocks, and source pills all use CSS variables instead of hardcoded dark fallbacks. _PR pending._
 
 ## Medium priority
 
 - [ ] **Solver: render Verification + Common-mistakes + Key-concepts sections inline,** not just at the end. The current `textbookSystemPrompt` prescribes order; verify the renderer respects it.
-- [ ] **Better empty states.** Sidebar Recent currently says "No items yet" — add a one-liner CTA like "Solve your first problem to see it here". Visualizer / Cheatsheet / Report empty states could be more inviting.
-- [ ] **Keyboard shortcuts.** `Cmd/Ctrl+K` for command palette / mode-switch, `Cmd/Ctrl+/` for help. Today there are none.
+- [x] **Better empty states.** Sidebar already reads "No items yet — solve a problem to see it here." (done in PR #50). Visualizer / Cheatsheet / Report have their own hero sections with CTAs when no content is loaded.
+- [x] **Keyboard shortcuts.** `Ctrl/Cmd+K` cycles through modes (solver → chat → cheatsheet → …), `Ctrl/Cmd+/` toggles the settings modal. _PR pending._
 - [x] **Multimodal input.** Composer accepts attachments and `analyzeUploadedImages` now extracts text from images (NVIDIA vision), PDFs (unpdf), and text-like files (UTF-8 decode). Extracted text is injected into the prompt via the existing `attachmentSummary` block in `src/lib/prompts.ts`.
 - [ ] **YouTube / web URL ingestion.** gpai.app composer footer says "Add PDF, image (JPG, PNG), website and Youtube link". Today we accept files; add URL paste that fetches the page (and YouTube transcript via `youtubetranscript`-style endpoint) and injects as context.
-- [ ] **Streaming "Thinking…" steps.** Already exists (`THINKING_STEPS` in `SolverView.tsx`); verify it actually advances during streaming, not just on a 1.1s timer.
-- [ ] **Better error messages.** Today a failed `/api/educate/stream` shows generic `error.message`. Surface friendlier "We couldn't reach the model — try again?" with a retry button.
+- [x] **Streaming "Thinking…" steps.** Verified: the `ThinkingProcess` component is mounted only while `isStreaming && !result`, and its 1.1s `setInterval` correctly advances through all 5 steps. The timer-based approach is intentional (streaming tokens don't map to discrete steps). No code change needed.
+- [x] **Better error messages.** Solver error section now has a "Try again" retry button alongside "Back to composer". Chat errors detect 429 rate-limit and 5xx server errors and show friendly messages instead of raw error strings. _PR pending._
 - [ ] **Quota fallback to demo mode.** When `NVIDIA_API_KEY` upstream returns 429 / 5xx, fall back to `demoChatStream` so the user gets *something* instead of a broken stream.
-- [ ] **Composer attachments visible after send.** When a user attaches a file in chat and sends, the attachment row clears — but there's no visual chip in the user-message bubble showing what was sent. Add a small attachment-chip in the rendered chat bubble.
-- [ ] **Mode badge color polish.** Recent items have a per-mode letter badge (`C / S / V / etc`); colors are inconsistent. Audit `.recent-mode.mode-*` rules in `src/app/globals.css` and align with the mode tab icon colors.
+- [x] **Composer attachments visible after send.** Already implemented: `UserBubble` in `ChatView.tsx` renders `.bubble-attachments` with image thumbnails (`.bubble-thumb`) or file name chips (`.bubble-file`). CSS is in place. No additional change needed.
+- [x] **Mode badge color polish.** Each mode badge now has a distinct tinted background + matching text color: solver (orange), chat (sky blue), cheatsheet (yellow), visualizer (purple), report (green), pdf-notes (pink), notebook (blue). _PR pending._
 - [ ] **Mobile responsiveness.** The sidebar+main layout breaks below ~720px. Add a hamburger to collapse the sidebar on small screens.
 
 ## Low priority / nice-to-have
@@ -196,7 +196,15 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — fix(chat,ui): increase maxOutputTokens + animations + font polish:** _PR pending._
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — fix(ui): backlog bug sweep — badge colors, light theme, error UX, keyboard shortcuts:** _PR pending._
+  - **Mode badge color polish:** each sidebar badge now has a distinct tinted background + matching text color (solver=orange, chat=blue, cheatsheet=yellow, visualizer=purple, report=green, pdf-notes=pink, notebook=blue).
+  - **Light theme polish:** Mermaid diagrams render with theme-appropriate palette (dark→dark, light→default). Settings overlay uses lighter scrim in light mode. KaTeX display blocks use subtle light-mode background. Source pills switched from hardcoded dark fallbacks to CSS variables.
+  - **Better error messages:** solver error section has a "Try again" retry button + "Back to composer". Chat errors detect 429/5xx and show friendly human messages.
+  - **Keyboard shortcuts:** `Ctrl/Cmd+K` cycles modes, `Ctrl/Cmd+/` toggles settings.
+  - **Verified already done:** streaming "Thinking…" steps (timer-based, works correctly), composer attachments (already render in user bubbles), better empty states (done in PR #50).
+  - **Verified:** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean.
+
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — fix(chat,ui): increase maxOutputTokens + animations + font polish:** _PR #51 (merged)._
   - **Chat response cutoff fix:** bumped `maxOutputTokens` from 4096 to 16384 in `streamChatResponse` (chat) and `streamEducationalSolverDraft` (solver) in `src/lib/orchestrator.ts`. The old 4096 cap caused mid-sentence cutoffs on long responses, especially in Deep Explain mode and complex multi-step solver answers.
   - **CSS overflow fixes:** added `overflow-wrap: break-word`, `word-break: break-word`, and `min-width: 0` to `.assistant-content`, `.chat-bubble`, `.math-markdown`, `.problem-card`, `.answer-card`, `.solution-card`. This prevents content from overflowing its container on narrow mobile screens, which was another source of the "response cut off to half" appearance.
   - **Animations:** chat messages fade-in + slide-up (`chat-msg-in`), solver result sections stagger fade-in (80ms delay cascade), hero sections 600ms fade-in, composer pop-in + focus-within glow ring, chat suggestions delayed fade-in, streaming cursor orange blink.

@@ -155,12 +155,18 @@ export function ChatView({
           setStreamText("");
         },
         onError: (msg) => {
+          const friendly =
+            msg.includes("429") || msg.includes("rate")
+              ? "The model is busy right now — please try again in a moment."
+              : msg.includes("5") && msg.match(/\b5\d{2}\b/)
+                ? "We couldn't reach the model — please try again."
+                : `Something went wrong: ${msg}`;
           onMessagesChange([
             ...next,
             {
               id: `e_${Date.now()}`,
               role: "assistant",
-              content: `Error: ${msg}`,
+              content: friendly,
               createdAt: new Date().toISOString(),
             },
           ]);

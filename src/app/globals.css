@@ -1862,9 +1862,32 @@ a {
   color: var(--danger);
 }
 .solver-error-hint {
-  color: var(--text-muted);
+  color: var(--ink-muted);
   font-size: 13px;
   margin: 8px 0 12px;
+}
+.solver-error-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 18px;
+  border-radius: 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.secondary-button:hover {
+  background: var(--bg-elev-2);
+  border-color: var(--line-strong);
 }
 
 /* streaming cursor */
