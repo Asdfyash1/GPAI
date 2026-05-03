@@ -273,6 +273,8 @@ These are gpai.app gaps and outperform-opportunities that haven't been scoped in
 
 ## Next-session priority order (read this first)
 
+**Priority 0 — Public landing page.** ✅ Done in PR #60 (this session). `/` now renders `<LandingPage />` (sticky nav, hero with sample-Solver illustrative card, 6-feature grid, 3-step how-it-works, 3-pillar why-Forge, footer); workspace moved to `/app`; `/app?auth=open` auto-opens the AuthModal so the landing-page "Sign in" CTA works. All landing CSS scoped under `.landing-*` selectors and reuses existing `--bg`/`--ink`/`--accent` tokens. Three breakpoints (980 / 720 / 420). Pre-existing module-load `new Resend(undefined)` makes `npm run build` need a dummy `RESEND_API_KEY` locally — should be lazy-init'd in a tiny follow-up.
+
 **Priority 1 — Complete Auth + Sync integration.** PR #58 landed the auth routes, Telegram storage, and login UI. But the frontend doesn't auto-save to Telegram yet, and there's no localStorage migration. These are the remaining pieces:
 
 1. **Auto-save hook** — after each chat message / solve / settings change, debounce and call `/api/sync/save` with the full user state. Only when logged in.
@@ -318,6 +320,17 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 - **PR #19 (PDF export, merged):** print backstop finding — captured as the second Critical bug above.
 
 ## Changelog (append-only — every session adds an entry)
+
+- **2026-05-03 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee resumed) — feat: public landing page at "/" + workspace moves to "/app":** _PR #60._
+  - New `<LandingPage />` rendered at `/` — sticky translucent nav, hero with `--accent`-highlighted headline + dual CTAs + bullet reassurances + a static illustrative "sample Solver" card on the right (problem bubble → answer line → cross-check pills → quiz line; markup-only, no fake interactivity).
+  - 6-feature card grid (`AI Solver`, `AI Chat`, `AI Visualizer`, `Cheatsheet Builder`, `Debate Mode`, `YouTube Ingestion`), 3-step "How it works", 3-pillar "Why Forge" with closing CTA pair, minimal footer.
+  - Workspace (`<EducationApp />`) moves to `/app`. **Bookmarks to `/?taskId=…` need updating to `/app?taskId=…`.** The `taskId` reader is unchanged, only its mount point moved.
+  - **`?auth=open` deep-link wiring** in `<EducationApp />`: existing `/api/auth/me` session check now also reads `window.location.search`. If user is not logged in and the param is present, `setAuthOpen(true)` fires and the param is stripped via `history.replaceState`. Logged-in users get nothing (param ignored). Used by every "Sign in" CTA on the landing page.
+  - All landing CSS scoped under `.landing-*` selectors at the end of `src/app/globals.css` (476 new lines). Reads only existing design tokens (`--bg`, `--bg-elev`, `--ink`, `--ink-muted`, `--accent`, `--accent-soft`, `--accent-strong`, `--line`, `--user-bubble`, `--shadow-soft`) so dark + light themes inherit naturally.
+  - **Mobile breakpoints** (all scoped, desktop unchanged): `≤ 980 px` hero collapses to one column + nav links hide; `≤ 720 px` padding tightens, CTAs step down; `≤ 420 px` quiet "Sign in" link hides.
+  - Verified `npx tsc --noEmit` + `npm run lint` + `npm run build` all clean (build needs `RESEND_API_KEY=re_dummy_for_build` because of the orthogonal pre-existing module-load `new Resend(undefined)` in `src/lib/email.ts` — Vercel has the var so prod is fine; should still be lazy-init'd in a follow-up).
+  - **No new dependencies, no new env vars.** Only `lucide-react` icons added (`CirclePlay` instead of `Youtube` because `lucide-react` doesn't export `Youtube`).
+  - Followups identified: lazy-init Resend (5-line fix); add OG meta + image to `src/app/layout.tsx`; add `robots.txt` + `sitemap.xml` once public share URLs land in Priority 2.
 
 - **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — feat: email auth + Telegram storage:** _PR #58._
   - **Auth routes:** `/api/auth/signup`, `/api/auth/login` (send OTP via Resend), `/api/auth/verify` (check OTP, create JWT), `/api/auth/me` (session check), `/api/auth/logout` (clear cookie).
