@@ -319,6 +319,13 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
+- **2026-05-03 — Devin (session d554ca628544428680e9796b95a46533) — feat: landing page (Priority 0):** _PR #60._
+  - **Landing page:** New `LandingPage` component renders at `/` with hero section, feature highlights (6 cards), "How it works" (3 steps), and bottom CTA.
+  - **Workspace route:** `EducationApp` moved to `/app` route so the landing page is the first thing visitors see. Workspace is still accessible without login.
+  - **Nav:** Sticky nav with Forge brand, theme toggle, Sign In button (opens AuthModal), and "Open App" CTA link.
+  - **Design:** Uses existing CSS var design system (`--bg`, `--ink`, `--accent`, `--line`, etc.). Responsive at 720px mobile breakpoint. Gradient accent text in hero, fade-up animation.
+  - **Files changed:** `src/components/LandingPage.tsx` (new), `src/app/page.tsx` (updated), `src/app/app/page.tsx` (new), `src/app/globals.css` (landing CSS appended).
+
 - **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — feat: email auth + Telegram storage:** _PR #58._
   - **Auth routes:** `/api/auth/signup`, `/api/auth/login` (send OTP via Resend), `/api/auth/verify` (check OTP, create JWT), `/api/auth/me` (session check), `/api/auth/logout` (clear cookie).
   - **Sync routes:** `/api/sync/save` (upload user data to Telegram topic), `/api/sync/load` (download from Telegram).
