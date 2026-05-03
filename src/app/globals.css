@@ -342,7 +342,7 @@ a {
   font-size: 13px;
   color: var(--ink-muted);
   border-radius: 8px;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 180ms ease, color 180ms ease, transform 120ms ease;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -353,6 +353,10 @@ a {
 .recent-item.is-active {
   background: var(--bg-elev);
   color: var(--ink);
+}
+
+.recent-item:active {
+  transform: scale(0.98);
 }
 
 .recent-title {
@@ -533,12 +537,16 @@ a {
   font-size: 13px;
   color: var(--ink-muted);
   background: transparent;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 120ms ease;
   white-space: nowrap;
 }
 
 .mode-tab:hover {
   color: var(--ink);
+}
+
+.mode-tab:active {
+  transform: scale(0.96);
 }
 
 .mode-tab.is-active {
@@ -604,6 +612,18 @@ a {
 .solver-hero {
   text-align: center;
   margin-top: 22px;
+  animation: hero-fade-in 600ms ease-out both;
+}
+
+@keyframes hero-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .hero-title {
@@ -619,6 +639,7 @@ a {
   font-style: italic;
   color: var(--accent);
   display: block;
+  transition: opacity 300ms ease;
 }
 
 .hero-subtitle {
@@ -636,7 +657,25 @@ a {
   border-radius: 18px;
   padding: 14px 16px 10px;
   box-shadow: var(--shadow-soft);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+  animation: composer-pop 400ms ease-out both;
+  animation-delay: 200ms;
+}
+
+@keyframes composer-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-soft);
 }
 
 .composer.is-drag-over {
@@ -905,12 +944,18 @@ a {
   border-radius: 50%;
   background: var(--bg-elev);
   color: var(--muted);
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 180ms ease, color 180ms ease, transform 120ms ease, box-shadow 180ms ease;
 }
 
 .send-button:not(:disabled):hover {
   background: var(--accent);
   color: white;
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+  transform: scale(1.05);
+}
+
+.send-button:not(:disabled):active {
+  transform: scale(0.92);
 }
 
 .send-button:disabled {
@@ -977,13 +1022,14 @@ a {
   border-radius: 14px;
   background: var(--panel);
   border: 1px solid var(--line);
-  transition: transform 120ms ease, border-color 120ms ease;
+  transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
   min-height: 130px;
 }
 
 .demo-card:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   border-color: var(--line-strong);
+  box-shadow: var(--shadow-soft);
 }
 
 .demo-label {
@@ -1023,11 +1069,17 @@ a {
   border: 1px solid var(--line);
   font-size: 12.5px;
   color: var(--ink);
-  transition: background 120ms ease;
+  transition: background 180ms ease, border-color 180ms ease, transform 120ms ease;
 }
 
 .chip:hover:not(:disabled) {
   background: var(--bg-elev-2);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.chip:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
 }
 
 .chip:disabled {
@@ -1296,6 +1348,23 @@ a {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  animation: section-fade-in 400ms ease-out both;
+}
+
+.result-section:nth-child(2) { animation-delay: 80ms; }
+.result-section:nth-child(3) { animation-delay: 160ms; }
+.result-section:nth-child(4) { animation-delay: 240ms; }
+.result-section:nth-child(5) { animation-delay: 320ms; }
+
+@keyframes section-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .section-row {
@@ -1318,7 +1387,17 @@ a {
   border-radius: 14px;
   background: var(--panel);
   font-size: 14.5px;
-  line-height: 1.62;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.problem-card:hover,
+.answer-card:hover,
+.solution-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-soft);
 }
 
 .cross-checked-badge {
@@ -1826,6 +1905,7 @@ a {
   text-align: center;
   margin-bottom: 12px;
   margin-top: 60px;
+  animation: hero-fade-in 600ms ease-out both;
 }
 
 .chat-thread {
@@ -1842,6 +1922,7 @@ a {
 
 .chat-row {
   display: flex;
+  animation: chat-msg-in 320ms ease-out both;
 }
 
 .chat-row-user {
@@ -1852,6 +1933,17 @@ a {
   justify-content: flex-start;
 }
 
+@keyframes chat-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .chat-bubble {
   max-width: 80%;
   padding: 10px 14px;
@@ -1859,6 +1951,8 @@ a {
   background: var(--bg-elev);
   font-size: 14px;
   line-height: 1.55;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .chat-bubble-user {
@@ -1868,9 +1962,12 @@ a {
 
 .assistant-content {
   width: 100%;
+  min-width: 0;
   font-size: 14.5px;
-  line-height: 1.62;
+  line-height: 1.65;
   color: var(--ink);
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* Sources pill stack */
@@ -1952,6 +2049,21 @@ a {
   padding: 2px 6px;
 }
 
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  animation: cursor-blink 800ms step-end infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 .thinking-dots {
   display: inline-flex;
   gap: 4px;
@@ -2001,6 +2113,8 @@ a {
   gap: 8px;
   justify-content: center;
   max-width: 720px;
+  animation: section-fade-in 400ms ease-out both;
+  animation-delay: 400ms;
 }
 
 /* ===========  CHEATSHEET ============ */
@@ -2547,6 +2661,12 @@ a {
 }
 
 /* ===========  MARKDOWN ============ */
+
+.math-markdown {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
+}
 
 .math-markdown h1,
 .math-markdown h2,
@@ -3424,8 +3544,21 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .demo-card-anim {
-    animation: none;
+  .demo-card-anim,
+  .solver-hero,
+  .composer,
+  .chat-row,
+  .result-section {
+    animation: none !important;
+  }
+  .chip,
+  .mode-tab,
+  .send-button,
+  .demo-card,
+  .problem-card,
+  .answer-card,
+  .solution-card {
+    transition: none !important;
   }
 }
 
