@@ -1,6 +1,7 @@
 import type {
   EducationRequest,
   EducationResponse,
+  GlossaryEntry,
   PracticeItem,
   SolutionStep,
   VerificationSignal,
@@ -162,6 +163,65 @@ function parseQAItems(section: string): PracticeItem[] {
   return items;
 }
 
+/**
+ * Pull glossary entries out of the model's `## Glossary` section.
+ *
+ * The prompt asks the model to emit one bullet per term in the shape:
+ *
+ *     - linear ODE — A differential equation linear in y and its derivatives.
+ *
+ * The dash separator can be `—` (em-dash, what we tell the model to use)
+ * or `-` / `–` / `:` (what some models substitute). Definition is one
+ * line of plain prose. Terms with LaTeX, markdown emphasis, or weird
+ * punctuation are dropped — they wouldn't render correctly inside an
+ * inline `<span>` overlay anyway.
+ */
+function parseGlossarySection(section: string): GlossaryEntry[] {
+  if (!section.trim()) return [];
+  const out: GlossaryEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const rawLine of section.split("\n")) {
+    const line = rawLine
+      .replace(/^[-*•]\s*/, "")
+      .replace(/^\d+[.)]\s*/, "")
+      .trim();
+    if (!line) continue;
+
+    // Match: "<term> <separator> <definition>" where separator is em-dash,
+    // en-dash, double-hyphen, hyphen-with-spaces, or a colon.
+    const match = /^(.+?)\s*(?:—|–|--|-\s|:\s)\s*(.+)$/.exec(line);
+    if (!match) continue;
+
+    const term = match[1]
+      .trim()
+      .replace(/^\*\*(.*)\*\*$/, "$1")
+      .replace(/^["'`](.*)["'`]$/, "$1")
+      .trim();
+    const definition = match[2]
+      .trim()
+      .replace(/^\*\*(.*)\*\*$/, "$1")
+      .replace(/[.,;:!?]$/, "")
+      .trim();
+
+    // Sanity: terms must be 1–4 words of letters/digits/space/hyphen, no
+    // LaTeX, no markdown, no parens.
+    if (term.length < 2 || term.length > 60) continue;
+    if (!/^[A-Za-z0-9][A-Za-z0-9 \-']{0,58}[A-Za-z0-9]$/.test(term)) continue;
+    if (term.split(/\s+/).length > 4) continue;
+    if (definition.length < 4 || definition.length > 240) continue;
+
+    const key = term.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    out.push({ term, definition: definition + (/[.!?]$/.test(definition) ? "" : ".") });
+    if (out.length >= 12) break; // hard cap
+  }
+
+  return out;
+}
+
 function inferTitle(request: EducationRequest): string {
   if (request.mode === "visualizer") return "AI-Generated Visual Plan";
   if (request.mode === "cheatsheet") return "Exam-Ready Cheatsheet";
@@ -248,6 +308,9 @@ export function parseModelResponse(
     }),
   );
 
+  const glossarySection = extractSection(markdown, "Glossary");
+  const glossary = parseGlossarySection(glossarySection);
+
   const overrideTitle = options.titleOverride?.trim();
   const finalTitle =
     overrideTitle && overrideTitle.length > 0
@@ -311,6 +374,7 @@ export function parseModelResponse(
             "Explain in plain English",
             "Create a quiz",
           ],
+    glossary: glossary.length > 0 ? glossary : undefined,
     confidence: verification.some((v) => v.status === "complete") ? 0.92 : 0.78,
     verification,
     createdAt: new Date().toISOString(),

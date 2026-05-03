@@ -33,6 +33,7 @@ import { MathMarkdown } from "@/components/MathMarkdown";
 import { ModelAvatars, modelDisplay } from "@/components/ModelAvatars";
 import { useStream } from "@/hooks/useStream";
 import { usePersonalization } from "@/hooks/usePersonalization";
+import type { GlossaryEntry } from "@/types/education";
 
 type SolverViewProps = {
   modelChoice: ModelChoice;
@@ -509,6 +510,18 @@ function SolverResult({
 
   const text = result?.solution || streamText || "";
 
+  // MathMarkdown auto-injects glossary anchors when it receives a
+  // `glossary` prop, so SolverView only has to *pass* the prop — no
+  // pre-processing needed here. We deliberately gate the prop on
+  // `result` (i.e. only after the stream has settled and the parser
+  // has produced a real glossary) so half-streamed prose isn't
+  // walked by the regex.
+  const askGlossary = (entry: GlossaryEntry) => {
+    sendFollowUp(
+      `Explain the term "${entry.term}" in more detail. The reference solution defined it as: ${entry.definition}`,
+    );
+  };
+
   const showInlineError = !isStreaming && !result && error;
 
   return (
@@ -564,7 +577,11 @@ function SolverResult({
               <CrossCheckBadge result={result} />
             </div>
             <div className="answer-card">
-              <MathMarkdown content={result.answer} />
+              <MathMarkdown
+                content={result.answer}
+                glossary={result.glossary}
+                onAskGlossary={askGlossary}
+              />
             </div>
           </section>
         )}
@@ -589,7 +606,11 @@ function SolverResult({
             {error ? (
               <p className="error-text">{error}</p>
             ) : text ? (
-              <MathMarkdown content={text} />
+              <MathMarkdown
+                content={text}
+                glossary={result?.glossary}
+                onAskGlossary={askGlossary}
+              />
             ) : (
               <ThinkingProcess />
             )}
@@ -602,7 +623,13 @@ function SolverResult({
             <h2 className="section-heading">Common mistakes</h2>
             <ul className="bullet-list">
               {result.commonMistakes.map((m, i) => (
-                <li key={i}>{m}</li>
+                <li key={i}>
+                  <MathMarkdown
+                    content={m}
+                    glossary={result.glossary}
+                    onAskGlossary={askGlossary}
+                  />
+                </li>
               ))}
             </ul>
           </section>
