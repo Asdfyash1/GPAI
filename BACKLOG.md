@@ -196,7 +196,13 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — feat: response time, regenerate, step-by-step reveal, debate mode, onboarding tour:** _PR #55._
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — feat: YouTube transcript ingestion:** _PR #56._
+  - **YouTube URL auto-detection:** paste a YouTube link into the composer and the transcript is auto-fetched and attached as context. Works in both Chat and Solver.
+  - **`/api/youtube-transcript` endpoint:** extracts video title and caption text from YouTube's innertube player config (no API key needed). Prefers English manual captions, falls back to auto-generated.
+  - **Attachment chip:** YouTube attachments show a red video icon and "YouTube: <title>" label.
+  - **Limitation:** only works for videos with captions (auto-generated or manual). Shows a clear error for videos without subtitles.
+
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — feat: response time, regenerate, step-by-step reveal, debate mode, onboarding tour:** _PR #55 (merged)._
   - **Response time display:** shows "Answered in X.Xs" / "Solved in X.Xs" after every AI response in chat and solver.
   - **Regenerate button:** re-runs the last AI response in chat (removes last assistant message, re-sends). Solver retry button already existed.
   - **Step-by-step reveal:** solution text is split on numbered steps; only the first is shown with a "Show next step" button. Collapse button after all are revealed.

@@ -8,6 +8,7 @@ import {
   Paperclip,
   Sparkles,
   Square,
+  Video,
   X,
 } from "lucide-react";
 import {
@@ -133,7 +134,56 @@ export function Composer(props: ComposerProps) {
   // multi-MB PDF is being decoded in the browser.
   const [parsingCount, setParsingCount] = useState(0);
   const [pickError, setPickError] = useState<string | null>(null);
+  const [ytFetching, setYtFetching] = useState(false);
+  const ytFetchedRef = useRef<Set<string>>(new Set());
   const currentModel = modelOptions.find((m) => m.id === props.modelChoice);
+
+  const YT_URL_RE = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/;
+
+  const tryFetchYouTube = useCallback(
+    (text: string) => {
+      const match = text.match(YT_URL_RE);
+      if (!match) return;
+      const videoId = match[1];
+      const fullUrl = match[0];
+      if (ytFetchedRef.current.has(videoId)) return;
+      if (props.attachments.some((a) => a.name.includes(videoId))) return;
+
+      ytFetchedRef.current.add(videoId);
+      setYtFetching(true);
+      setPickError(null);
+
+      fetch("/api/youtube-transcript", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: fullUrl }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(err.error ?? "Failed to fetch transcript");
+          }
+          return res.json() as Promise<{ videoId: string; title: string; transcript: string }>;
+        })
+        .then((data) => {
+          const asset: UploadedAsset = {
+            name: `YouTube: ${data.title}`,
+            type: "youtube",
+            size: data.transcript.length,
+            extractedText: data.transcript,
+          };
+          props.onAttachmentsChange([...props.attachments, asset]);
+          props.onChange(text.replace(fullUrl, "").trim());
+        })
+        .catch((err) => {
+          setPickError(err instanceof Error ? err.message : "YouTube fetch failed");
+          ytFetchedRef.current.delete(videoId);
+        })
+        .finally(() => setYtFetching(false));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.attachments, props.onAttachmentsChange, props.onChange],
+  );
 
   const onPickFiles = useCallback(
     async (files: FileList | File[] | null) => {
@@ -286,11 +336,13 @@ export function Composer(props: ComposerProps) {
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
-      {(props.attachments.length > 0 || parsingCount > 0) && (
+      {(props.attachments.length > 0 || parsingCount > 0 || ytFetching) && (
         <div className="attachment-row">
           {props.attachments.map((a, i) => (
             <div key={`${a.name}-${i}`} className="attachment-chip">
-              {a.preview ? (
+              {a.type === "youtube" ? (
+                <Video size={14} className="yt-icon" />
+              ) : a.preview ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={a.preview} alt={a.name} className="attachment-thumb" />
               ) : (
@@ -319,6 +371,12 @@ export function Composer(props: ComposerProps) {
               </span>
             </div>
           )}
+          {ytFetching && (
+            <div className="attachment-chip is-parsing" aria-live="polite">
+              <Loader2 size={14} className="spin" />
+              <span className="attachment-name">Fetching YouTube transcript…</span>
+            </div>
+          )}
         </div>
       )}
       {pickError && (
@@ -330,7 +388,17 @@ export function Composer(props: ComposerProps) {
         className="composer-textarea"
         placeholder={props.placeholder ?? "Type a message..."}
         value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
+        onChange={(e) => {
+          const v = e.target.value;
+          props.onChange(v);
+          tryFetchYouTube(v);
+        }}
+        onPaste={(e) => {
+          const pasted = e.clipboardData.getData("text");
+          if (pasted) {
+            setTimeout(() => tryFetchYouTube(props.value + pasted), 50);
+          }
+        }}
         onKeyDown={handleKeyDown}
         rows={props.compact ? 2 : 3}
       />
