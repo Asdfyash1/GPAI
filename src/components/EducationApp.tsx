@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Menu, Moon, Sun } from "lucide-react";
+import { LogIn, LogOut, Menu, Moon, Sun, User } from "lucide-react";
 import type {
   ChatMessage,
   ChatSession,
@@ -21,6 +21,7 @@ import { NotebookView } from "@/components/NotebookView";
 import { PdfNotesView } from "@/components/PdfNotesView";
 import { SettingsModal } from "@/components/SettingsModal";
 import { OnboardingTour } from "@/components/OnboardingTour";
+import { AuthModal } from "@/components/AuthModal";
 
 type Theme = "dark" | "light";
 
@@ -38,6 +39,8 @@ export function EducationApp() {
   // paint doesn't flash a full-screen sidebar over the workspace.
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [user, setUser] = useState<{ email: string } | null>(null);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("auto");
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
   const [solverPrompt, setSolverPrompt] = useState("");
@@ -120,6 +123,14 @@ export function EducationApp() {
         }
       }
     });
+  }, []);
+
+  // Check for existing auth session on mount
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json() as Promise<{ user: { email: string } | null }>)
+      .then((d) => { if (d.user) setUser(d.user); })
+      .catch(() => { /* not logged in */ });
   }, []);
 
   // Lock background scroll while the off-canvas drawer is open so the
@@ -403,6 +414,35 @@ export function EducationApp() {
             >
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
+            {user ? (
+              <div className="user-menu">
+                <span className="user-avatar">
+                  <User size={14} />
+                </span>
+                <span className="user-email">{user.email}</span>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={async () => {
+                    await fetch("/api/auth/logout", { method: "POST" });
+                    setUser(null);
+                  }}
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="sign-in-btn"
+                onClick={() => setAuthOpen(true)}
+              >
+                <LogIn size={14} />
+                <span>Sign in</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -474,6 +514,11 @@ export function EducationApp() {
         </div>
       </main>
       <OnboardingTour />
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onAuth={(u) => setUser(u)}
+      />
     </div>
   );
 }
