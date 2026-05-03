@@ -3,10 +3,20 @@
 import { Loader2, Mail, X } from "lucide-react";
 import { useState } from "react";
 
+export type AuthedUser = {
+  email: string;
+  emailHash: string;
+  // True the very first time this email completed verification (no
+  // prior cloud data). EducationApp uses this to decide whether to
+  // offer the localStorage → cloud migration prompt: only when this
+  // device has data AND the cloud is fresh.
+  isNew: boolean;
+};
+
 type AuthModalProps = {
   open: boolean;
   onClose: () => void;
-  onAuth: (user: { email: string }) => void;
+  onAuth: (user: AuthedUser) => void;
 };
 
 export function AuthModal({ open, onClose, onAuth }: AuthModalProps) {
@@ -56,9 +66,20 @@ export function AuthModal({ open, onClose, onAuth }: AuthModalProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code }),
       });
-      const data = (await res.json()) as { ok?: boolean; email?: string; error?: string };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        email?: string;
+        emailHash?: string;
+        isNew?: boolean;
+        error?: string;
+      };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Verification failed");
-      onAuth({ email: data.email ?? email });
+      if (!data.emailHash) throw new Error("Verification response missing emailHash");
+      onAuth({
+        email: data.email ?? email,
+        emailHash: data.emailHash,
+        isNew: !!data.isNew,
+      });
       onClose();
       setStep("email");
       setEmail("");

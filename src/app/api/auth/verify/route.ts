@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     const token = await createToken({ email, emailHash });
 
     return new Response(
-      JSON.stringify({ ok: true, email, isNew }),
+      JSON.stringify({ ok: true, email, emailHash, isNew }),
       {
         status: 200,
         headers: {

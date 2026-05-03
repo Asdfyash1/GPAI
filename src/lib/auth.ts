@@ -26,6 +26,26 @@ export async function verifyToken(token: string): Promise<SessionPayload | null>
   }
 }
 
+// Same as verifyToken but also surfaces the standard JWT timing claims
+// so callers can implement sliding-session refresh ("if the token is
+// older than N days, mint a new one"). Returns null on invalid /
+// expired tokens, just like verifyToken.
+export async function verifyTokenWithMeta(
+  token: string,
+): Promise<(SessionPayload & { iat?: number; exp?: number }) | null> {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    return {
+      email: payload.email as string,
+      emailHash: payload.emailHash as string,
+      iat: typeof payload.iat === "number" ? payload.iat : undefined,
+      exp: typeof payload.exp === "number" ? payload.exp : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function sessionCookie(token: string): string {
   return `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}`;
 }
