@@ -21,7 +21,10 @@ import { NotebookView } from "@/components/NotebookView";
 import { PdfNotesView } from "@/components/PdfNotesView";
 import { SettingsModal } from "@/components/SettingsModal";
 import { OnboardingTour } from "@/components/OnboardingTour";
-import { AuthModal } from "@/components/AuthModal";
+import { AuthModal, type AuthedUser } from "@/components/AuthModal";
+import { MigrationPrompt } from "@/components/MigrationPrompt";
+import { useSync } from "@/hooks/useSync";
+import { buildSnapshot, isEmptySnapshot, parseSnapshot, type SyncSnapshot } from "@/lib/sync";
 
 type Theme = "dark" | "light";
 
@@ -40,7 +43,16 @@ export function EducationApp() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
-  const [user, setUser] = useState<{ email: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; emailHash: string } | null>(null);
+  // Sync lifecycle gate. We don't auto-save until we've either loaded
+  // the remote snapshot for the user OR resolved the migration prompt,
+  // so we never overwrite real cloud data with stale local state.
+  const [syncReady, setSyncReady] = useState(false);
+  const [migrationOpen, setMigrationOpen] = useState(false);
+  // Sentinel surfaced via aria-live for non-modal users ("Saved" /
+  // "Saving…" / "Couldn't sync"). We only render it when a user is
+  // signed in so logged-out users don't see noise.
+  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [modelChoice, setModelChoice] = useState<ModelChoice>("auto");
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
   const [solverPrompt, setSolverPrompt] = useState("");
@@ -125,17 +137,95 @@ export function EducationApp() {
     });
   }, []);
 
+  // Pull the user's saved snapshot from Telegram and decide whether to
+  // overwrite local state, prompt for migration, or quietly enable
+  // auto-save with what's already on the device.
+  //
+  //  - Cloud has data → cloud wins (replace local). Auto-save enabled.
+  //  - Cloud is empty + local has data → prompt before pushing local up
+  //    so we never silently transfer the user's local notes onto a
+  //    different account they just signed into. Auto-save stays paused
+  //    until they choose.
+  //  - Cloud is empty + local is empty → nothing to do, enable saves.
+  //
+  // `allowMigrationPrompt` lets the cold-start path (already-logged-in
+  // page reload) suppress the prompt if the user previously discarded
+  // it: in practice we always pass `true` and rely on the cloud-vs-local
+  // comparison to decide.
+  //
+  // Defined ABOVE the auth-mount useEffect so the lexical forward-
+  // reference lint check is happy without any ref dance. JS scoping
+  // means the closure still picks up the latest state on each render.
+  function hydrateFromCloud({
+    allowMigrationPrompt,
+  }: {
+    allowMigrationPrompt: boolean;
+  }): Promise<void> {
+    return (async () => {
+      setSyncReady(false);
+      setSyncStatus("idle");
+      try {
+        const res = await fetch("/api/sync/load");
+        if (!res.ok) {
+          // Don't strand the user offline — keep local state, allow
+          // saves to retry. Worst case the next online save wins.
+          setSyncReady(true);
+          return;
+        }
+        const json = (await res.json()) as { data?: unknown };
+        const remote = parseSnapshot(json.data);
+        if (!isEmptySnapshot(remote)) {
+          // Cloud canonical — replace local working set.
+          setHistory(remote!.history);
+          setResponseStore(remote!.responses);
+          setChatSessions(remote!.chats);
+          if (remote!.settings.theme === "dark" || remote!.settings.theme === "light") {
+            setTheme(remote!.settings.theme);
+          }
+          setActiveItem(undefined);
+          setSolverResult(null);
+          setSolverPrompt("");
+          activeChatIdRef.current = null;
+          setActiveChatId(null);
+          setSyncReady(true);
+          return;
+        }
+        // Cloud empty: do we have local data worth importing?
+        const localCount = history.length;
+        if (allowMigrationPrompt && localCount > 0) {
+          setMigrationOpen(true);
+          // Stay un-ready so auto-save doesn't fire until the user picks.
+          return;
+        }
+        // Local empty too — nothing to migrate, just turn on saves.
+        setSyncReady(true);
+      } catch {
+        // Network error: keep local state, leave saves paused so we
+        // don't push potentially-empty state up. The next user-initiated
+        // change after they come back online will trigger another save.
+        setSyncReady(true);
+      }
+    })();
+  }
+
   // Check for existing auth session on mount, and honor `?auth=open`
   // (landing page "Sign in" CTAs route here with that flag so the modal
   // pops automatically). Only auto-open when there is no live session.
+  // The /api/auth/me endpoint also slides the cookie forward (issues a
+  // fresh 7-day token if the current one is older than 6 days) so an
+  // active session never lapses at the boundary.
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/me")
-      .then((r) => r.json() as Promise<{ user: { email: string } | null }>)
+      .then((r) => r.json() as Promise<{ user: { email: string; emailHash: string } | null }>)
       .then((d) => {
         if (cancelled) return;
-        if (d.user) {
-          setUser(d.user);
+        if (d.user?.emailHash) {
+          setUser({ email: d.user.email, emailHash: d.user.emailHash });
+          // Existing session — hydrate from cloud immediately. We treat
+          // this the same as a fresh login: trust the cloud as canonical
+          // when it has data; otherwise leave local state intact.
+          void hydrateFromCloud({ allowMigrationPrompt: true });
           return;
         }
         if (typeof window === "undefined") return;
@@ -153,6 +243,11 @@ export function EducationApp() {
     return () => {
       cancelled = true;
     };
+    // hydrateFromCloud is intentionally not in deps — a new closure
+    // every render would re-trigger this on every state change and
+    // re-fetch /api/auth/me unnecessarily. The mount-time call is the
+    // only one we want.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Lock background scroll while the off-canvas drawer is open so the
@@ -207,6 +302,26 @@ export function EducationApp() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  // Build the cloud snapshot from current state. Memoised on shape so
+  // that scrolling / hover / mode-tab clicks don't churn the value
+  // (and the useSync debounce stays stable).
+  const cloudSnapshot: SyncSnapshot = useMemo(
+    () =>
+      buildSnapshot({
+        history,
+        responses: responseStore,
+        chats: chatSessions,
+        theme,
+      }),
+    [history, responseStore, chatSessions, theme],
+  );
+
+  useSync({
+    enabled: !!user && syncReady,
+    snapshot: cloudSnapshot,
+    onStatusChange: (next) => setSyncStatus(next),
+  });
 
   useEffect(() => {
     if (typeof window === "undefined" || !hydrated.current) return;
@@ -448,6 +563,8 @@ export function EducationApp() {
                   onClick={async () => {
                     await fetch("/api/auth/logout", { method: "POST" });
                     setUser(null);
+                    setSyncReady(false);
+                    setSyncStatus("idle");
                   }}
                   aria-label="Sign out"
                   title="Sign out"
@@ -539,8 +656,70 @@ export function EducationApp() {
       <AuthModal
         open={authOpen}
         onClose={() => setAuthOpen(false)}
-        onAuth={(u) => setUser(u)}
+        onAuth={(u: AuthedUser) => {
+          setUser({ email: u.email, emailHash: u.emailHash });
+          // After login: pull the user's snapshot. The same call also
+          // raises the migration prompt if the cloud is empty and we
+          // already have local history.
+          void hydrateFromCloud({ allowMigrationPrompt: true });
+        }}
       />
+      <MigrationPrompt
+        open={migrationOpen}
+        localCount={history.length}
+        onImport={async () => {
+          // Push the current local state to the cloud now (don't wait
+          // for the 5s debounce) so the user gets immediate confirmation
+          // and a refresh would already see their data on the cloud.
+          const snapshot = buildSnapshot({
+            history,
+            responses: responseStore,
+            chats: chatSessions,
+            theme,
+          });
+          try {
+            const res = await fetch("/api/sync/save", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ data: snapshot }),
+            });
+            if (!res.ok) throw new Error(`save failed: ${res.status}`);
+            setSyncStatus("saved");
+          } catch {
+            setSyncStatus("error");
+            // Don't block the user — close the modal anyway and let the
+            // background auto-save retry. They'll see the "Couldn't sync"
+            // status indicator in the topbar.
+          }
+          setMigrationOpen(false);
+          setSyncReady(true);
+        }}
+        onDiscard={() => {
+          // User chose to start fresh on this account. Clear local state
+          // BEFORE flipping syncReady so the auto-save doesn't push the
+          // about-to-be-deleted local data up to the cloud.
+          setHistory([]);
+          setResponseStore({});
+          setChatSessions({});
+          setActiveItem(undefined);
+          setSolverResult(null);
+          setSolverPrompt("");
+          activeChatIdRef.current = null;
+          setActiveChatId(null);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem(HISTORY_KEY);
+            localStorage.removeItem(STORE_KEY);
+            localStorage.removeItem(CHAT_STORE_KEY);
+          }
+          setMigrationOpen(false);
+          setSyncReady(true);
+        }}
+      />
+      {user && syncStatus === "error" && (
+        <div className="sync-status sync-status-error" role="status" aria-live="polite">
+          Couldn&rsquo;t sync to your account. We&rsquo;ll retry on your next change.
+        </div>
+      )}
     </div>
   );
 }
