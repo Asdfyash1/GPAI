@@ -116,8 +116,8 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 
 ## Low priority / nice-to-have
 
-- [ ] **Auth.** No login today. Add Google/Apple OAuth + an email magic-link path so chats can sync across devices.
-- [ ] **Server-side history sync.** Today `eduforge:chats` is local-only. Add Supabase / Postgres + `/api/chats` so history follows the user across devices.
+- [ ] **Auth + storage via Telegram Bot API.** See detailed plan in "Telegram Auth + Storage Plan" section below.
+- ~~**Server-side history sync.**~~ Covered by Telegram storage plan below.
 - [x] **Model picker UX.** Composer shows a pill labelled "Auto" today; clicking it should open a model picker with cost/quality stats per model. _Added debate mode option + all existing models. PR #55._
 - [ ] **Telemetry.** Add anonymous usage events so we can see which modes get used.
 - [x] **Onboarding tour.** First-visit modal walking through Solver → Chat → Visualizer → Cheatsheet. _PR #55._
@@ -139,6 +139,119 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 - gpai.app's free plan gives 50 credits and exhausts quickly — Solver = 30 credits, Chat = 1 credit/turn. If you need to compare side-by-side, ask the user for a fresh email / paid account because tearing through 50 credits in a single session is normal.
 - Repo-scoped secrets: `NVIDIA_API_KEY` is org-saved; Devin envs auto-inject it on session boot (per the env config that was approved).
 - Repo's CLAUDE/AGENTS rule says: read `node_modules/next/dist/docs/` before changing anything Next.js-API-shaped, because Next 16 has breaking changes vs. training data.
+
+## Telegram Auth + Storage Plan
+
+**Overview:** Use Telegram Bot API as a free, unlimited backend for user auth and data storage. Users sign up / log in with email (normal website UX) — Telegram is invisible to them.
+
+### Telegram Setup (owner does once)
+
+1. Create 1–3 bots via @BotFather → get `BOT_TOKEN_1`, `BOT_TOKEN_2`, etc.
+2. Create a private Telegram channel → enable "Topics" in channel settings
+3. Add all bots as admins with permissions: Post Messages, Manage Topics, Delete Messages
+4. Get the channel ID (forward a message to @userinfobot or use `-100xxxx` format)
+
+### Vercel Env Vars Required
+
+| Env var | Where to get it | Required? |
+|---|---|---|
+| `TELEGRAM_BOT_TOKENS` | @BotFather (comma-separated if multiple) | Yes |
+| `TELEGRAM_CHANNEL_ID` | Channel info (e.g. `-100xxxxxxxxxx`) | Yes |
+| `JWT_SECRET` | Self-generated: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` | Yes |
+| `RESEND_API_KEY` | https://resend.com → Dashboard → API Keys | Yes (if email OTP) |
+
+### Data Structure in Telegram Channel
+
+```
+Private Channel (Topics enabled)
+├── Topic: "user:<email-hash>"
+│   ├── Msg: {"t":"profile","email":"john@gmail.com","createdAt":"...","avatar":"..."}
+│   ├── Msg: {"t":"chat","sid":"abc","title":"...","messages":[...]}
+│   ├── Msg: {"t":"solve","id":"xyz","prompt":"...","result":{...}}
+│   ├── Msg: {"t":"cheatsheet","id":"...","content":"..."}
+│   ├── Msg: {"t":"settings","theme":"dark","model":"auto"}
+│   └── File: large-chat-session.json (for chats > 4096 chars)
+│
+├── Topic: "user:<email-hash-2>"
+│   └── ...
+│
+└── Topic: "shared:public"
+    ├── Msg: {"t":"share","slug":"abc123","type":"solve","data":{...}}
+    └── ...  (for /s/<slug> share URLs)
+```
+
+- Each message ≤ 4096 chars (Telegram limit). Larger data → upload as `.json` file (up to 50MB via bot API).
+- Email is hashed (SHA-256) for topic names so raw emails aren't exposed in Telegram.
+
+### API Routes
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/auth/signup` | POST | `{email}` → generate 6-digit OTP, store in-memory (5 min TTL), send via Resend |
+| `/api/auth/verify` | POST | `{email, code}` → verify OTP, create Telegram topic if new user, return JWT cookie |
+| `/api/auth/login` | POST | `{email}` → same as signup but for returning users |
+| `/api/auth/me` | GET | Read JWT cookie → return user profile |
+| `/api/auth/logout` | POST | Clear JWT cookie |
+| `/api/sync/save` | POST | `{type, data}` → send JSON message to user's Telegram topic |
+| `/api/sync/load` | GET | Read all messages from user's topic → return organized data |
+| `/api/sync/delete` | DELETE | `{messageId}` → delete specific message from topic |
+| `/api/share/create` | POST | Save to "shared:public" topic → return `/s/<slug>` |
+| `/api/share/[slug]` | GET | Read from shared topic → return data |
+
+### Frontend Pages
+
+| Component | What it shows |
+|---|---|
+| Login/Signup modal | Email input → "Send code" → OTP input → "Verify". Auto-detects new vs returning. |
+| Navbar auth section | Shows email + avatar (Gravatar) when logged in. "Sign in" button when not. |
+| Settings → Account | Email display, logout button |
+| Migration wizard | On first login: "Found X chats on this device — import them?" |
+
+### Multi-Bot Load Balancing
+
+Rotate through bot tokens on each API call. Each bot handles 30 msg/sec. With 3 bots = 90 msg/sec = ~1000+ concurrent users.
+
+```ts
+const tokens = process.env.TELEGRAM_BOT_TOKENS!.split(",");
+let idx = 0;
+function nextBotToken() { return tokens[idx++ % tokens.length]; }
+```
+
+### Reliability & Edge Cases
+
+- **Session refresh:** JWT auto-renews before expiry (7-day tokens, refresh at 6 days). Users don't get randomly logged out.
+- **OTP rate limit:** Max 5 attempts per email per hour to prevent spam/brute force.
+- **Offline fallback:** If Telegram API is unreachable, app falls back to localStorage and queues sync for later.
+- **Auto-save:** Debounced — saves to Telegram every 5 seconds while user is active, not on every keystroke.
+- **Data migration:** On first login, localStorage chats/solves are uploaded to Telegram topic. After migration, localStorage is kept as cache but Telegram is source of truth.
+- **Gravatar avatar:** Fetches user avatar from Gravatar using email hash. Falls back to initials circle.
+
+### Limits
+
+| What | Limit |
+|---|---|
+| Messages per bot | 30/sec (90/sec with 3 bots) |
+| File upload per bot API | 50 MB |
+| Message text length | 4096 chars |
+| Topics per channel | Unlimited |
+| Total storage | Unlimited |
+| Cost | $0 |
+
+### Implementation Order
+
+1. **PR A: Auth** — signup/login/verify/logout routes + JWT middleware + login modal UI
+2. **PR B: Sync** — save/load routes + auto-save hook + migration wizard
+3. **PR C: Share** — share/create + /s/[slug] page + "Share" button in solver/chat
+4. **PR D: Polish** — offline fallback, rate limiting, session refresh, Gravatar
+
+### Status: Waiting for owner to provide
+
+- [ ] Telegram bot token(s) — create via @BotFather
+- [ ] Telegram channel ID — create private channel with Topics enabled, add bot(s) as admin
+- [ ] Email service decision — Resend (recommended) or skip email (use username+password instead)
+- [ ] `JWT_SECRET` — generate and add to Vercel env vars
+
+---
 
 ## Feature planning — proposals not yet started
 
@@ -196,7 +309,11 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — feat: YouTube transcript ingestion:** _PR #56._
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — docs: Telegram auth + storage plan:** _PR #57._
+  - Added full "Telegram Auth + Storage Plan" section to BACKLOG with architecture, data structure, API routes, frontend pages, multi-bot load balancing, reliability edge cases, and implementation order.
+  - Waiting for owner to provide: bot token(s), channel ID, email service decision, JWT secret.
+
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — feat: YouTube transcript ingestion:** _PR #56 (merged)._
   - **YouTube URL auto-detection:** paste a YouTube link into the composer and the transcript is auto-fetched and attached as context. Works in both Chat and Solver.
   - **`/api/youtube-transcript` endpoint:** extracts video title and caption text from YouTube's innertube player config (no API key needed). Prefers English manual captions, falls back to auto-generated.
   - **Attachment chip:** YouTube attachments show a red video icon and "YouTube: <title>" label.
