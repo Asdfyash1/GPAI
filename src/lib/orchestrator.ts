@@ -283,10 +283,10 @@ export async function streamEducationalSolverDraft(
     maxOutputTokens: 16384,
   });
 
-  return {
-    textStream: result.textStream,
-    text: Promise.resolve(result.text),
-  };
+  return withQuotaFallback(
+    { textStream: result.textStream, text: Promise.resolve(result.text) },
+    request.prompt,
+  );
 }
 
 /**
@@ -539,10 +539,12 @@ export async function streamChatResponse(options: {
     maxOutputTokens: trivial ? 256 : 16384,
   });
 
-  return {
-    textStream: result.textStream,
-    text: Promise.resolve(result.text),
-  };
+  const lastUserContent =
+    [...options.messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  return withQuotaFallback(
+    { textStream: result.textStream, text: Promise.resolve(result.text) },
+    lastUserContent,
+  );
 }
 
 const SMALL_TALK_REGEX =
@@ -570,6 +572,45 @@ async function demoStream(request: EducationRequest): Promise<StreamingHandle> {
     textStream: chunked(text),
     text: Promise.resolve(text),
   };
+}
+
+function quotaFallbackStream(prompt: string): StreamingHandle {
+  const text =
+    "The AI model is temporarily unavailable (rate limit or server error). " +
+    "Please try again in a moment.\n\n" +
+    `**Your prompt:** ${prompt.slice(0, 300)}${prompt.length > 300 ? "…" : ""}`;
+  return {
+    textStream: chunked(text),
+    text: Promise.resolve(text),
+  };
+}
+
+function isQuotaOrServerError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /\b429\b/.test(msg) || /\b5\d{2}\b/.test(msg) || /rate.?limit/i.test(msg) || /too many requests/i.test(msg);
+}
+
+function withQuotaFallback(
+  handle: StreamingHandle,
+  prompt: string,
+): StreamingHandle {
+  async function* wrapped() {
+    try {
+      for await (const chunk of handle.textStream) {
+        yield chunk;
+      }
+    } catch (err) {
+      if (isQuotaOrServerError(err)) {
+        console.warn("[orchestrator] quota/server error, falling back:", err);
+        for await (const chunk of quotaFallbackStream(prompt).textStream) {
+          yield chunk;
+        }
+      } else {
+        throw err;
+      }
+    }
+  }
+  return { textStream: wrapped(), text: handle.text };
 }
 
 async function demoChatStream(options: {

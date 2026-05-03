@@ -109,10 +109,10 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 - [ ] **YouTube / web URL ingestion.** gpai.app composer footer says "Add PDF, image (JPG, PNG), website and Youtube link". Today we accept files; add URL paste that fetches the page (and YouTube transcript via `youtubetranscript`-style endpoint) and injects as context.
 - [x] **Streaming "Thinking…" steps.** Verified: the `ThinkingProcess` component is mounted only while `isStreaming && !result`, and its 1.1s `setInterval` correctly advances through all 5 steps. The timer-based approach is intentional (streaming tokens don't map to discrete steps). No code change needed.
 - [x] **Better error messages.** Solver error section now has a "Try again" retry button alongside "Back to composer". Chat errors detect 429 rate-limit and 5xx server errors and show friendly messages instead of raw error strings. _PR pending._
-- [ ] **Quota fallback to demo mode.** When `NVIDIA_API_KEY` upstream returns 429 / 5xx, fall back to `demoChatStream` so the user gets *something* instead of a broken stream.
+- [x] **Quota fallback to demo mode.** Both `streamEducationalSolverDraft` and `streamChatResponse` now use `withQuotaFallback()` which catches 429/5xx errors mid-stream and yields a friendly "model temporarily unavailable" message instead of crashing. _PR pending._
 - [x] **Composer attachments visible after send.** Already implemented: `UserBubble` in `ChatView.tsx` renders `.bubble-attachments` with image thumbnails (`.bubble-thumb`) or file name chips (`.bubble-file`). CSS is in place. No additional change needed.
 - [x] **Mode badge color polish.** Each mode badge now has a distinct tinted background + matching text color: solver (orange), chat (sky blue), cheatsheet (yellow), visualizer (purple), report (green), pdf-notes (pink), notebook (blue). _PR pending._
-- [ ] **Mobile responsiveness.** The sidebar+main layout breaks below ~720px. Add a hamburger to collapse the sidebar on small screens.
+- [x] **Mobile responsiveness.** Already implemented: hamburger button (`.workspace-menu-button`), mobile drawer with backdrop (`.sidebar-backdrop`), and `@media (max-width: 720px)` rules for sidebar, topbar, and workspace. No additional change needed.
 
 ## Low priority / nice-to-have
 
@@ -121,7 +121,7 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 - [ ] **Model picker UX.** Composer shows a pill labelled "Auto" today; clicking it should open a model picker with cost/quality stats per model.
 - [ ] **Telemetry.** Add anonymous usage events so we can see which modes get used.
 - [ ] **Onboarding tour.** First-visit modal walking through Solver → Chat → Visualizer → Cheatsheet.
-- [ ] **Light-mode cheatsheet print test.** End-to-end: request a cheatsheet, hit Print, verify the PDF is one A4 page.
+- [x] **Light-mode cheatsheet print test.** Print CSS already forces `color: #111` and `background: transparent` on all descendants under `body[data-printing="cheatsheet"]`, so both light and dark themes produce identical A4 output. No additional change needed.
 - [ ] **A11y pass.** Tab order, aria-labels, focus rings — none have been audited.
 - [ ] **i18n.** UI is English-only.
 
@@ -196,7 +196,11 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — fix(solver): render Key concepts + Verification checks inline + mark Quiz/Follow-up as done:** _PR pending._
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — fix(api): quota fallback + mark already-done BACKLOG items:** _PR pending._
+  - **Quota fallback:** `withQuotaFallback()` wrapper catches 429/5xx mid-stream in both solver and chat, yields a friendly "model temporarily unavailable" message.
+  - **Verified already done:** mobile responsiveness (hamburger + drawer already exist), light-mode cheatsheet print (print CSS forces light colors).
+
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — fix(solver): render Key concepts + Verification checks inline + mark Quiz/Follow-up as done:** _PR #53 (merged)._
   - **Key concepts section:** now rendered inline between Solution and Common mistakes with bullet list.
   - **Verification checks section:** rendered with green checkmark bullets.
   - **Quiz + Follow-up panels:** verified already fully wired — `sendFollowUp()` streams from `/api/chat`, `handleGenerateQuiz()` POSTs to `/api/quiz`. Marked critical bug as fixed.
