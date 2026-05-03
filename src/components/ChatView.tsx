@@ -99,6 +99,65 @@ export function ChatView({
     setResponseTime(null);
     streamStartRef.current = performance.now();
 
+    // Debate mode: POST to /api/debate, format result as structured markdown
+    if (modelChoice === "debate") {
+      (async () => {
+        try {
+          const res = await fetch("/api/debate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: content }),
+          });
+          const elapsed = (performance.now() - streamStartRef.current) / 1000;
+          setResponseTime(Math.round(elapsed * 10) / 10);
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: "Debate failed" }));
+            onMessagesChange([
+              ...next,
+              {
+                id: `e_${Date.now()}`,
+                role: "assistant",
+                content: `Something went wrong: ${(err as { error?: string }).error ?? "Unknown error"}`,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+            return;
+          }
+          const data = await res.json() as {
+            entries: Array<{ label: string; response: string; durationMs: number }>;
+            judge: { winner: string; reasoning: string };
+          };
+          let md = `## Debate Results\n\n`;
+          for (const e of data.entries) {
+            const isWinner = e.label === data.judge.winner;
+            md += `### ${e.label}${isWinner ? " 🏆" : ""} *(${(e.durationMs / 1000).toFixed(1)}s)*\n\n`;
+            md += `${e.response}\n\n---\n\n`;
+          }
+          md += `**Judge's verdict:** ${data.judge.winner} wins — ${data.judge.reasoning}`;
+          onMessagesChange([
+            ...next,
+            {
+              id: `a_${Date.now()}`,
+              role: "assistant",
+              content: md,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        } catch (err) {
+          onMessagesChange([
+            ...next,
+            {
+              id: `e_${Date.now()}`,
+              role: "assistant",
+              content: `Debate failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      })();
+      return;
+    }
+
     // Strip raw `dataUrl` (base64) bytes from every attachment that
     // belongs to a previous turn. The server only re-analyzes the
     // attachments on the *last* user message (`lastUser.attachments`

@@ -30,6 +30,7 @@ const nvidiaModelRoutes = {
   nemotron: "nvidia/llama-3.3-nemotron-super-49b-v1",
   "deepseek-flash": "deepseek-ai/deepseek-v4-flash",
   llama: "meta/llama-3.3-70b-instruct",
+  debate: "meta/llama-3.3-70b-instruct",
   demo: "local-demo",
 } as const;
 

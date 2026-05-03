@@ -80,6 +80,12 @@ const modelOptions: ModelOption[] = [
     group: "primary",
   },
   {
+    id: "debate",
+    label: "Debate",
+    description: "All models answer, a judge picks the best response.",
+    group: "primary",
+  },
+  {
     id: "demo",
     label: "Demo (offline)",
     description: "Deterministic sample output, no API key required.",
