@@ -2,28 +2,43 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
-let mermaidPromise: Promise<typeof import("mermaid")["default"]> | null = null;
+function currentTheme(): "dark" | "light" {
+  if (typeof document === "undefined") return "dark";
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
 
-async function loadMermaid() {
-  if (!mermaidPromise) {
-    mermaidPromise = import("mermaid").then((m) => {
-      m.default.initialize({
-        startOnLoad: false,
-        theme: "dark",
-        securityLevel: "loose",
-        themeVariables: {
-          background: "transparent",
-          primaryColor: "#1f2937",
-          primaryBorderColor: "#374151",
-          primaryTextColor: "#f9fafb",
-          lineColor: "#94a3b8",
-          fontFamily: "system-ui, -apple-system, sans-serif",
-        },
-      });
-      return m.default;
-    });
+const darkVars = {
+  background: "transparent",
+  primaryColor: "#1f2937",
+  primaryBorderColor: "#374151",
+  primaryTextColor: "#f9fafb",
+  lineColor: "#94a3b8",
+  fontFamily: "system-ui, -apple-system, sans-serif",
+};
+
+const lightVars = {
+  background: "transparent",
+  primaryColor: "#e5e7eb",
+  primaryBorderColor: "#d1d5db",
+  primaryTextColor: "#1a1a1a",
+  lineColor: "#6b7280",
+  fontFamily: "system-ui, -apple-system, sans-serif",
+};
+
+let mermaidMod: typeof import("mermaid")["default"] | null = null;
+
+async function loadMermaid(theme: "dark" | "light") {
+  if (!mermaidMod) {
+    const m = await import("mermaid");
+    mermaidMod = m.default;
   }
-  return mermaidPromise;
+  mermaidMod.initialize({
+    startOnLoad: false,
+    theme: theme === "light" ? "default" : "dark",
+    securityLevel: "loose",
+    themeVariables: theme === "light" ? lightVars : darkVars,
+  });
+  return mermaidMod;
 }
 
 export function MermaidBlock({ code }: { code: string }) {
@@ -37,7 +52,8 @@ export function MermaidBlock({ code }: { code: string }) {
     let cancelled = false;
     (async () => {
       try {
-        const mermaid = await loadMermaid();
+        const theme = currentTheme();
+        const mermaid = await loadMermaid(theme);
         const { svg: out } = await mermaid.render(id, code.trim());
         if (!cancelled) {
           setSvg(out);
