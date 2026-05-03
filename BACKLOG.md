@@ -273,15 +273,20 @@ These are gpai.app gaps and outperform-opportunities that haven't been scoped in
 
 ## Next-session priority order (read this first)
 
-**Priority 0 — Public landing page.** ✅ Done in PR #60 (this session). `/` now renders `<LandingPage />` (sticky nav, hero with sample-Solver illustrative card, 6-feature grid, 3-step how-it-works, 3-pillar why-Forge, footer); workspace moved to `/app`; `/app?auth=open` auto-opens the AuthModal so the landing-page "Sign in" CTA works. All landing CSS scoped under `.landing-*` selectors and reuses existing `--bg`/`--ink`/`--accent` tokens. Three breakpoints (980 / 720 / 420). Pre-existing module-load `new Resend(undefined)` makes `npm run build` need a dummy `RESEND_API_KEY` locally — should be lazy-init'd in a tiny follow-up.
+**Priority 0 — Public landing page.** ✅ Done in main via PR #61. (PR #60 was a parallel-session duplicate, closed.) `/` now renders `<LandingPage />`; workspace moved to `/app`. Pre-existing module-load `new Resend(undefined)` was fixed in PR #62 (lazy-init) so local builds no longer need `RESEND_API_KEY`.
 
-**Priority 1 — Complete Auth + Sync integration.** PR #58 landed the auth routes, Telegram storage, and login UI. But the frontend doesn't auto-save to Telegram yet, and there's no localStorage migration. These are the remaining pieces:
+**Priority 1 — Complete Auth + Sync integration.** ✅ In flight via _this PR (#63)_. PR #58 had landed the auth routes, Telegram storage, and login UI — but the frontend never wired auto-save / load-on-login / migration / refresh. This PR delivers all five pieces:
 
-1. **Auto-save hook** — after each chat message / solve / settings change, debounce and call `/api/sync/save` with the full user state. Only when logged in.
-2. **Load on login** — after successful auth verify, call `/api/sync/load` and hydrate `history`, `chatSessions`, `responseStore`, `settings` from the returned data.
-3. **localStorage → Telegram migration wizard** — on first login, if localStorage has existing data, show "Found X chats — import them?" modal, then upload to Telegram.
-4. **Offline fallback** — if `/api/sync/save` fails (Telegram down), queue the save and retry later. Keep localStorage as cache.
-5. **Session refresh** — auto-renew JWT before 7-day expiry (check on page load, renew at 6 days).
+1. **Auto-save hook** — ✅ `src/hooks/useSync.ts`. After each chat message / solve / settings / theme change, debounces 5s and POSTs `/api/sync/save` with `{ schema, history, responses, chats, settings }`. Only fires while logged in AND after the cloud snapshot has been loaded (so we never overwrite real cloud data with stale/empty local). On failure, the dirty state stays dirty so the next change retriggers — implicit retry queue, no separate persistent queue needed.
+2. **Load on login** — ✅ `hydrateFromCloud()` in `EducationApp.tsx`. After AuthModal `onAuth`, GETs `/api/sync/load`, parses with `parseSnapshot`, and replaces local state when remote has data. Cloud is canonical for signed-in users; local stays the working set when cloud is empty.
+3. **localStorage → Telegram migration prompt** — ✅ `src/components/MigrationPrompt.tsx`. Triggered when (signed-in && remote-empty && local-non-empty). Buttons: “Import N tasks” (immediate /api/sync/save with current local) or “Skip — start fresh” (clears local + localStorage so the auto-save loop doesn’t silently push them up anyway).
+4. **Offline retry** — ✅ implicit via the `lastSaved` dirty-string check in `useSync`. Last-write-wins on the same payload, last-pending-write retries on next state change. Local localStorage write path is unchanged so offline users still keep their data on-device.
+5. **Session refresh** — ✅ sliding window in `/api/auth/me`: if the JWT `iat` is older than 6 days, mints a fresh 7-day token and rolls the cookie via `Set-Cookie`. Active users never get bumped at the 7-day boundary; inactive users still expire normally.
+
+Follow-ups not in this PR (call out for future sessions):
+  - Surface a small “Saving… / Saved” indicator in the topbar (currently we only render a toast on error). The state is already exposed via `syncStatus`; just render in the topbar.
+  - Document-based registry for >50 users (the current pinned-message registry caps at 4096 chars).
+  - Telegram-side conflict resolution if two devices write within the 5s debounce window (last-write-wins is fine for v1 but loses data on simultaneous edits).
 
 **Priority 2 — Share URLs.** `/api/share/create` + `/s/[slug]` page so users can share solves/chats via link.
 
@@ -321,13 +326,26 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-03 — Devin (session d554ca628544428680e9796b95a46533) — feat: auth gate + dedicated login page:** _PR #62._
+- **2026-05-03 — Devin (session d554ca628544428680e9796b95a46533) — feat: auth gate + dedicated login page:** _PR #64._
   - **Dedicated `/login` page:** Full-page login/signup form (email → OTP → verify) replaces the modal-only flow. Centered card with Forge branding, labels, monospace OTP input, and "Use a different email" back link.
   - **Auth guard on `/app`:** New `<AuthGuard>` wrapper component checks `/api/auth/me` on mount; redirects unauthenticated users to `/login`. Shows a loading spinner while checking.
   - **Landing page CTAs updated:** All "Get started", "Sign in", and "Open workspace" links now point to `/login` instead of `/app`. Users must authenticate before accessing the workspace.
   - **Files:** `src/components/LoginPage.tsx` (new), `src/components/AuthGuard.tsx` (new), `src/app/login/page.tsx` (new route), `src/app/app/page.tsx` (wrapped with AuthGuard), `src/components/LandingPage.tsx` (CTAs updated), `src/app/globals.css` (login + auth-guard CSS).
 
-- **2026-05-03 — Devin (session 1fcd2760b5f2450ab653b9bf5ad563ee resumed) — feat: public landing page at "/" + workspace moves to "/app":** _PR #60._
+- **2026-05-03 — Devin — feat: auto-save / load-on-login / migration prompt / sliding session refresh:** _PR #63._ Priority 1 (auth + sync integration) completed.
+  - **`useSync` hook** (`src/hooks/useSync.ts`) — debounced auto-save. On every state change in `EducationApp`, kicks a 5s timer; on quiet, POSTs the snapshot to `/api/sync/save`. JSON-equality check skips no-op saves; serialised payload of last-successful-save is stored so failures stay dirty (implicit retry on next change). In-flight save is awaited before launching the next so two POSTs can't race on Telegram and lose data.
+  - **`hydrateFromCloud` + `parseSnapshot`** — on AuthModal `onAuth` (and on cold-start when `/api/auth/me` returns a live session), GETs `/api/sync/load`, parses with `src/lib/sync.ts` (accepts current schema + the legacy `{profile, chats: [], settings}` bootstrap as "empty"), and replaces `history` / `responseStore` / `chatSessions` / `theme` when the cloud has data. Cloud is canonical for signed-in users; local stays the working set when cloud is empty.
+  - **Migration prompt** (`src/components/MigrationPrompt.tsx`) — only shown when (signed-in && remote-empty && local-non-empty). "Import N tasks" calls `/api/sync/save` immediately and turns sync on. "Skip" clears local state + localStorage so the auto-save loop doesn't push them up anyway.
+  - **Sliding session refresh** (`src/app/api/auth/me/route.ts` + `verifyTokenWithMeta` in `src/lib/auth.ts`) — if the JWT `iat` is older than 6 days, the route mints a fresh 7-day token and rolls the cookie via `Set-Cookie`. Active users never lapse at the 7-day boundary.
+  - **AuthModal** widened: `onAuth` now passes `{ email, emailHash, isNew }`. `/api/auth/verify` returns `emailHash` so the client doesn't need a second `/api/auth/me` round trip.
+  - **Sync gate**: `useSync({ enabled })` is gated on `!!user && syncReady`. `syncReady` flips to `true` only after the post-login load finishes (or migration prompt is resolved), so auto-save can never overwrite real cloud data with stale local state during the brief window between login and load.
+  - **Sync error toast** (`.sync-status` in `globals.css`) — bottom-right `aria-live=polite` toast, only renders on `syncStatus === "error"`. Successful saves stay silent. Mobile (`≤ 720 px`) flips it to a full-width banner.
+  - **No new dependencies, no new env vars.** All five spec items from BACKLOG Priority 1 done in one PR.
+  - Verified `npx tsc --noEmit` + `npm run lint` + `npm run build` (with `RESEND_API_KEY` unset — depends on PR #62) all clean.
+
+- **2026-05-03 — Devin — fix: lazy-init Resend so builds without `RESEND_API_KEY` don't crash:** _PR #62._ `src/lib/email.ts` was instantiating `new Resend(process.env.RESEND_API_KEY)` at module load; the constructor throws synchronously on `undefined`, so any local / preview / CI build without the secret died at "Failed to collect page data for /api/auth/signup". Vercel has the var so prod was fine. Fixed by deferring instantiation to the first `sendOTPEmail()` call. Same singleton lifecycle on prod (cached after first call). Production behaviour unchanged.
+
+- **2026-05-03 — Devin — feat: public landing page at "/" + workspace moves to "/app":** _PR #60._
   - New `<LandingPage />` rendered at `/` — sticky translucent nav, hero with `--accent`-highlighted headline + dual CTAs + bullet reassurances + a static illustrative "sample Solver" card on the right (problem bubble → answer line → cross-check pills → quiz line; markup-only, no fake interactivity).
   - 6-feature card grid (`AI Solver`, `AI Chat`, `AI Visualizer`, `Cheatsheet Builder`, `Debate Mode`, `YouTube Ingestion`), 3-step "How it works", 3-pillar "Why Forge" with closing CTA pair, minimal footer.
   - Workspace (`<EducationApp />`) moves to `/app`. **Bookmarks to `/?taskId=…` need updating to `/app?taskId=…`.** The `taskId` reader is unchanged, only its mount point moved.
