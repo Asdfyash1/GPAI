@@ -118,9 +118,9 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 
 - [ ] **Auth.** No login today. Add Google/Apple OAuth + an email magic-link path so chats can sync across devices.
 - [ ] **Server-side history sync.** Today `eduforge:chats` is local-only. Add Supabase / Postgres + `/api/chats` so history follows the user across devices.
-- [ ] **Model picker UX.** Composer shows a pill labelled "Auto" today; clicking it should open a model picker with cost/quality stats per model.
+- [x] **Model picker UX.** Composer shows a pill labelled "Auto" today; clicking it should open a model picker with cost/quality stats per model. _Added debate mode option + all existing models. PR #55._
 - [ ] **Telemetry.** Add anonymous usage events so we can see which modes get used.
-- [ ] **Onboarding tour.** First-visit modal walking through Solver → Chat → Visualizer → Cheatsheet.
+- [x] **Onboarding tour.** First-visit modal walking through Solver → Chat → Visualizer → Cheatsheet. _PR #55._
 - [x] **Light-mode cheatsheet print test.** Print CSS already forces `color: #111` and `background: transparent` on all descendants under `body[data-printing="cheatsheet"]`, so both light and dark themes produce identical A4 output. No additional change needed.
 - [ ] **A11y pass.** Tab order, aria-labels, focus rings — none have been audited.
 - [ ] **i18n.** UI is English-only.
@@ -147,7 +147,7 @@ These are gpai.app gaps and outperform-opportunities that haven't been scoped in
 - **Cross-device shareable URL via `/api/publish`.** Today `?taskId=<id>` only works on the same device because solves live in `localStorage`. Need an opt-in publish endpoint: POST a solve to a server-side store (KV / SQLite / file blob), get back `/s/<slug>`. On GET, hydrate the solve into the existing `taskId` flow. Should support solver, chat threads, and cheatsheets uniformly.
 - **Light theme polish.** There's a topbar theme toggle but several views were styled for dark only. Audit `solver-view`, `chat`, `cheatsheet-page`, `notebook-page`, `visualizer-canvas` against `[data-theme="light"]` and ship token-only fixes.
 - **Visualizer: chemistry / SMILES rendering.** Today chemistry category routes to Flux only. Add SMILES → SVG via SmilesDrawer or RDKit-WASM so a SMILES string in the prompt produces a real molecule diagram alongside any illustration.
-- **Solver: step-by-step reveal mode.** Hide subsequent steps behind a "Show next step" button so students can attempt before peeking. gpai.app does this; we currently dump all steps at once.
+- ~~**Solver: step-by-step reveal mode.**~~ [x] Done in PR #55 — "Show next step" button splits solution into numbered steps, reveals one at a time.
 - **Chat: image-output answers.** When the chat prompt is "show me a diagram of X" and Web Search is off, route through `/api/visualize` and inline the resulting image in the chat reply (similar to how Sources stack renders today).
 - **Cheatsheet: per-section regenerate.** Right now you regenerate the whole sheet. Let the user click any heading to refresh just that section without losing the rest.
 - **Mobile / responsive pass.** The right-rail collapses, but the composer + topbar haven't been audited at 360px. Add a responsive breakpoint sweep.
@@ -184,7 +184,7 @@ If you have leftover time after Tier A #3:
 - **Cross-device shareable URL `/api/publish`** — see Feature planning. Without this, `?taskId=` is useless across devices.
 - **Light theme polish** — topbar toggle exists but several views were dark-only. Audit `solver-view`, `chat`, `cheatsheet-page`, `notebook-page`, `visualizer-canvas` against `[data-theme="light"]`.
 - **Visualizer SMILES rendering** for chemistry prompts.
-- **Solver step-by-step reveal mode** (gpai.app does this; we dump all steps at once).
+- ~~**Solver step-by-step reveal mode**~~ [x] Done in PR #55.
 - Then Tier B (PRs 8–13: parallel streaming, Download modal, public share, Quiz/Flashcard/Practice Test variants, adaptive follow-up cards).
 
 After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all three must be clean), then `git_pr(action="create")` after `git_pr(action="fetch_template")`. Wait for CI green via `git(action="pr_checks")`. Append a Changelog entry below and tick the BACKLOG checkbox in the same PR.
@@ -196,7 +196,14 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 
 ## Changelog (append-only — every session adds an entry)
 
-- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — fix(api): quota fallback + mark already-done BACKLOG items:** _PR pending._
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — feat: response time, regenerate, step-by-step reveal, debate mode, onboarding tour:** _PR #55._
+  - **Response time display:** shows "Answered in X.Xs" / "Solved in X.Xs" after every AI response in chat and solver.
+  - **Regenerate button:** re-runs the last AI response in chat (removes last assistant message, re-sends). Solver retry button already existed.
+  - **Step-by-step reveal:** solution text is split on numbered steps; only the first is shown with a "Show next step" button. Collapse button after all are revealed.
+  - **Debate mode:** new "Debate" model option sends the same prompt to all 4 NVIDIA models in parallel, then a judge (Llama 70B) picks the best response. Results rendered as structured markdown with trophy emoji.
+  - **Onboarding tour:** 5-step first-visit modal (Welcome → Solver → Chat → Visualizer → Cheatsheet). Stored in localStorage, "Skip tour" link.
+
+- **2026-05-03 — Devin (session 8d3d058a94cd46c4b8c12d460648c12e) — fix(api): quota fallback + mark already-done BACKLOG items:** _PR #54 (merged)._
   - **Quota fallback:** `withQuotaFallback()` wrapper catches 429/5xx mid-stream in both solver and chat, yields a friendly "model temporarily unavailable" message.
   - **Verified already done:** mobile responsiveness (hamburger + drawer already exist), light-mode cheatsheet print (print CSS forces light colors).
 
