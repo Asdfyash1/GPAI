@@ -125,12 +125,34 @@ export function EducationApp() {
     });
   }, []);
 
-  // Check for existing auth session on mount
+  // Check for existing auth session on mount, and honor `?auth=open`
+  // (landing page "Sign in" CTAs route here with that flag so the modal
+  // pops automatically). Only auto-open when there is no live session.
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/auth/me")
       .then((r) => r.json() as Promise<{ user: { email: string } | null }>)
-      .then((d) => { if (d.user) setUser(d.user); })
-      .catch(() => { /* not logged in */ });
+      .then((d) => {
+        if (cancelled) return;
+        if (d.user) {
+          setUser(d.user);
+          return;
+        }
+        if (typeof window === "undefined") return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("auth") === "open") {
+          setAuthOpen(true);
+          // Clean the query so a refresh doesn't keep re-opening it.
+          params.delete("auth");
+          const qs = params.toString();
+          const next = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+          window.history.replaceState(null, "", next);
+        }
+      })
+      .catch(() => { /* not logged in; modal stays closed unless user clicks Sign in */ });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Lock background scroll while the off-canvas drawer is open so the
