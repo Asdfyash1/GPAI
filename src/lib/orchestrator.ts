@@ -280,7 +280,7 @@ export async function streamEducationalSolverDraft(
     system: getSystemPrompt(request.mode, request.personalization),
     prompt: buildTaskPrompt(request),
     temperature: 0.2,
-    maxOutputTokens: 4096,
+    maxOutputTokens: 16384,
   });
 
   return {
@@ -536,7 +536,7 @@ export async function streamChatResponse(options: {
     system,
     messages: options.messages,
     temperature: trivial ? 0.5 : 0.3,
-    maxOutputTokens: trivial ? 256 : 4096,
+    maxOutputTokens: trivial ? 256 : 16384,
   });
 
   return {
