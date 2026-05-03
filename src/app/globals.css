@@ -714,6 +714,10 @@ a {
 .attachment-icon {
   font-size: 14px;
 }
+.yt-icon {
+  color: #ff0000;
+  flex-shrink: 0;
+}
 
 .attachment-name {
   max-width: 140px;
