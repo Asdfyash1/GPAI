@@ -539,7 +539,7 @@ export function EducationApp() {
         onRename={handleRenameItem}
         onNewTask={handleNewTask}
         onOpenSettings={() => setSettingsOpen(true)}
-        userLabel="hiyash04+asd1"
+        userLabel={user?.email ?? "Guest"}
       />
       {mobileSidebarOpen && (
         <button
