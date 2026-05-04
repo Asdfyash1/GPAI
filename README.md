@@ -1,42 +1,236 @@
-# Forge — STEM Copilot
+# Forge — AI-Powered STEM Copilot
 
-A high-performance educational clone inspired by GPAI-style STEM workflows, built with a distinct UI and deployable on Vercel.
+Forge is a full-stack AI education platform that turns any STEM problem — typed, photographed, or pasted from a URL — into a step-by-step solution, interactive quiz, diagram, cheatsheet, and more. Built with **Next.js 16**, **TypeScript**, and **NVIDIA NIM** models, deployed on **Vercel**.
+
+---
 
 ## Features
 
-- AI Solver with answer, step-by-step derivation, cross-checks, common mistakes, follow-ups, quiz, copy/share/download actions.
-- AI Visualizer with prompt-to-diagram planning, upload support, ratio/model controls, visual engine gallery, and export-style workflow.
-- AI Chat / Deep Explain for deeper tutoring with uploaded documents/images/links as context.
-- AI Cheatsheet Builder for prompt/file-driven printable study blocks.
-- Multi-pass orchestrator: NVIDIA textbook solver → verifier/formatter → optional OpenAI-compatible cross-checkers.
-- NVIDIA image-to-text analysis for uploaded homework screenshots, diagrams, and worksheet photos.
-- KaTeX-ready markdown rendering for formulas.
+### AI Solver
+Upload a photo of a homework problem, paste LaTeX, or type a question. Forge returns:
+- **Step-by-step derivation** with collapsible reveal (show one step at a time)
+- **Final answer** with KaTeX-rendered formulas
+- **Cross-check verification** — a second model independently validates the primary answer (agree / minor difference / disagree)
+- **Key concepts** and **common mistakes** sections
+- **Inline glossary** — orange-underlined terms with hover definitions
+- **Follow-up chips** — one-click deeper dives ("Why does this step work?", "Show me a similar problem")
+- **Built-in quiz panel** — paginated MCQ with hints, explanations, and scoring
+- **Share** — generate a public link anyone can view (no login required)
+- **Download / Copy** actions
 
-## Environment
+### AI Chat
+Streaming multi-turn conversations with persistent threads:
+- Multiple frontier model selection (Nemotron, DeepSeek Flash, Llama, auto)
+- **Deep Explain** toggle for rigorous, textbook-level responses
+- **Web search** toggle — fetches live web context before answering
+- **YouTube ingestion** — paste a YouTube URL, Forge auto-fetches the transcript and uses it as context
+- File/image/PDF upload as conversation context
+- Follow-up suggestion chips
+- Regenerate any response
+- Share chat threads via public link
 
-The app works without API keys using deterministic demo output. To enable NVIDIA NIM:
+### AI Visualizer
+Turn a prompt into a visual output:
+- **Mermaid diagrams** — flowcharts, sequence diagrams, class diagrams, ER diagrams
+- **AI image generation** — Flux 1 Schnell for illustrations, charts, circuit diagrams
+- Aspect ratio controls (16:9, 4:3, 1:1, A4 portrait/landscape)
+- Category presets (illustration, graph, flowchart, diagram, circuit, chemistry, logic)
+
+### Cheatsheet Builder
+Generate compact, printable study cheatsheets from any topic, syllabus, or uploaded document. Organized into titled sections with formulas and key facts.
+
+### Debate Mode
+Pit **four models** against the same prompt simultaneously. A judge model picks the winner and explains why. Side-by-side answer cards reveal where models agree and disagree.
+
+### Report Writer
+Generate polished research-style documents with structured sections: abstract, introduction, background, methods, results, conclusion, references.
+
+### PDF Notes
+Upload a PDF → Forge extracts the text and generates study notes, summaries, and key takeaways. Uses `unpdf` for pure-JS parsing (no native binaries).
+
+### Interactive Notebook
+A scratchpad-style environment for iterative problem solving with AI assistance.
+
+### OCR / Vision
+Upload a photo of handwritten work, a textbook page, or a diagram. NVIDIA Nemotron Omni reads the image and feeds the extracted text into the solver. Client-side compression (1600px / q0.85) keeps payloads under the 1.7 MB API gateway limit.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16 (App Router, Turbopack) |
+| Language | TypeScript (strict) |
+| UI | React 19, Lucide icons, CSS custom properties (no Tailwind) |
+| Math rendering | KaTeX via `rehype-katex` + `remark-math` |
+| Markdown | `react-markdown` + `remark-gfm` |
+| Diagrams | Mermaid.js (client-side rendering) |
+| LLM API | NVIDIA NIM (Nemotron, DeepSeek Flash, Llama 3.3) via Vercel AI SDK |
+| Vision/OCR | NVIDIA Nemotron Omni 30B |
+| Image gen | Flux 1 Schnell (via NVIDIA NIM) |
+| Auth | Email OTP → JWT (HttpOnly cookie, 7-day sliding window) |
+| Email | Resend API (lazy-initialized) |
+| Storage | Telegram Bot API (server-side only, invisible to users) |
+| Hosting | Vercel (serverless, Hobby-tier compatible) |
+| PDF parsing | `unpdf` (pure JS, no native deps) |
+
+---
+
+## Project Structure
+
+```
+src/
+├── app/
+│   ├── api/
+│   │   ├── auth/
+│   │   │   ├── login/route.ts      # POST — send OTP (alias of signup)
+│   │   │   ├── logout/route.ts     # POST — clear JWT cookie
+│   │   │   ├── me/route.ts         # GET  — check session + sliding refresh
+│   │   │   ├── signup/route.ts     # POST — send OTP email via Resend
+│   │   │   └── verify/route.ts     # POST — verify OTP, mint JWT, create user topic
+│   │   ├── chat/route.ts           # POST — streaming chat endpoint
+│   │   ├── debate/route.ts         # POST — 4-model debate mode
+│   │   ├── educate/
+│   │   │   ├── route.ts            # POST — non-streaming solver
+│   │   │   └── stream/route.ts     # POST — streaming step-by-step solver
+│   │   ├── parse-pdf/route.ts      # POST — PDF text extraction
+│   │   ├── quiz/route.ts           # POST — generate quiz from problem text
+│   │   ├── share/
+│   │   │   ├── route.ts            # POST — create shareable link
+│   │   │   └── load/route.ts       # GET  — load shared content by slug
+│   │   ├── sync/
+│   │   │   ├── load/route.ts       # GET  — load user data from cloud
+│   │   │   └── save/route.ts       # POST — save user data to cloud
+│   │   ├── visualize/route.ts      # POST — diagram/image generation
+│   │   ├── web-search/route.ts     # POST — web search for chat context
+│   │   └── youtube-transcript/route.ts  # POST — fetch YouTube captions
+│   ├── app/page.tsx                # /app — main workspace (auth-guarded)
+│   ├── login/page.tsx              # /login — dedicated login page
+│   ├── s/[slug]/page.tsx           # /s/:slug — shared content viewer
+│   ├── page.tsx                    # / — public landing page
+│   ├── layout.tsx                  # Root layout (fonts, metadata)
+│   └── globals.css                 # ALL styles (~5300 lines, design system)
+│
+├── components/
+│   ├── EducationApp.tsx            # Main workspace — all state lives here
+│   ├── LandingPage.tsx             # Public marketing page at /
+│   ├── LoginPage.tsx               # Split-screen login (feature showcase + auth form)
+│   ├── AuthGuard.tsx               # Wraps /app — redirects to /login if unauthenticated
+│   ├── AuthModal.tsx               # In-app login modal (workspace topbar)
+│   ├── MigrationPrompt.tsx         # First-login "Import local data?" dialog
+│   ├── SharedPage.tsx              # Read-only viewer for /s/:slug shared content
+│   ├── SolverView.tsx              # AI solver — step reveal, cross-check, quiz, follow-ups
+│   ├── ChatView.tsx                # Streaming chat with persistent threads
+│   ├── CheatsheetView.tsx          # Topic → printable cheatsheet
+│   ├── VisualizerView.tsx          # Mermaid diagrams + image generation
+│   ├── DocumentView.tsx            # Report writer mode
+│   ├── PdfNotesView.tsx            # PDF upload → AI notes
+│   ├── NotebookView.tsx            # Interactive notebook
+│   ├── Composer.tsx                # Shared input (text + file upload + model selector)
+│   ├── Sidebar.tsx                 # Navigation sidebar with history
+│   ├── ModeTabs.tsx                # Feature mode tab bar
+│   ├── MathMarkdown.tsx            # KaTeX + markdown renderer
+│   ├── MermaidBlock.tsx            # Client-side Mermaid diagram renderer
+│   ├── GlossaryTerm.tsx            # Orange-underlined glossary term with tooltip
+│   ├── ModelAvatars.tsx            # Model icons for debate mode
+│   ├── SettingsModal.tsx           # Theme + preferences
+│   └── OnboardingTour.tsx          # First-visit guided tour
+│
+├── hooks/
+│   ├── useStream.ts                # SSE streaming hook for chat/solver
+│   ├── useSync.ts                  # 5s debounced auto-save to cloud
+│   └── usePersonalization.ts       # User preferences (occupation, custom instructions)
+│
+├── lib/
+│   ├── auth.ts                     # JWT (jose), OTP generation/verification
+│   ├── telegram.ts                 # Telegram Bot API storage (server-side only)
+│   ├── email.ts                    # Resend OTP email (lazy-init)
+│   ├── sync.ts                     # SyncSnapshot type, buildSnapshot, parseSnapshot
+│   ├── orchestrator.ts             # LLM pipeline — multi-model coordination
+│   ├── vision.ts                   # OCR via NVIDIA Nemotron Omni
+│   ├── prompts.ts                  # System prompt library
+│   ├── response-parser.ts          # Regex decomposition of LLM markdown
+│   ├── streaming-protocol.ts       # SSE protocol helpers
+│   ├── client-extract.ts           # Browser-side PDF/text parsing
+│   ├── demo-solver.ts              # Deterministic demo output (no API key needed)
+│   ├── glossary-markdown.ts        # Glossary term highlighting in markdown
+│   ├── image-generation.ts         # Flux 1 Schnell image generation
+│   ├── web-search.ts               # Web search provider
+│   └── research.ts                 # Research report generation
+│
+└── types/
+    └── education.ts                # All TypeScript interfaces
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Node.js 18+** (20+ recommended)
+- **npm** (comes with Node)
+
+### Install & Run
 
 ```bash
-NVIDIA_API_KEY=your_nvidia_key
-# Optional overrides — defaults to working models on NIM. Do NOT set these to
-# `mistralai/mistral-large-3-675b-instruct-2512`; that model is not in the
-# NVIDIA NIM catalog and every call will fail.
+# Clone
+git clone https://github.com/Asdfyash1/GPAI.git
+cd GPAI
+
+# Install dependencies
+npm install
+
+# Run dev server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). The app works without any API keys — it falls back to deterministic demo output.
+
+### Verify
+
+```bash
+npm run lint    # ESLint
+npm run build   # Production build (Next.js 16 + Turbopack)
+```
+
+> **Note:** If building locally without `RESEND_API_KEY`, the build still succeeds because Resend is lazy-initialized (deferred to first `sendOTPEmail()` call). OTP emails won't send, but nothing crashes.
+
+---
+
+## Environment Variables
+
+The app is fully functional without any env vars (demo mode). Add these for production features:
+
+### Required for AI Features
+
+| Variable | Source | Purpose |
+|----------|--------|---------|
+| `NVIDIA_API_KEY` | [nvidia.com/nim](https://build.nvidia.com/) | LLM + vision API calls |
+
+### Required for Auth & Storage
+
+| Variable | Source | Purpose |
+|----------|--------|---------|
+| `JWT_SECRET` | Self-generated (64-char hex) | JWT signing for auth tokens |
+| `RESEND_API_KEY` | [resend.com](https://resend.com) | OTP email delivery |
+| `TELEGRAM_BOT_TOKENS` | [@BotFather](https://t.me/BotFather) (comma-separated) | Cloud storage backend (multi-bot rotation) |
+| `TELEGRAM_CHANNEL_ID` | Private channel with Topics enabled | `-100xxxxxxxxxx` format |
+
+### Optional Model Overrides
+
+```bash
 NVIDIA_SOLVER_MODEL=meta/llama-3.3-70b-instruct
 NVIDIA_VERIFIER_MODEL=meta/llama-3.3-70b-instruct
 NVIDIA_MODEL_NEMOTRON=nvidia/llama-3.3-nemotron-super-49b-v1
 NVIDIA_MODEL_DEEPSEEK_FLASH=deepseek-ai/deepseek-v4-flash
 NVIDIA_MODEL_LLAMA=meta/llama-3.3-70b-instruct
-```
-
-For image-to-text analysis the app uses NVIDIA's `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` multimodal model (via the same hosted endpoint at `integrate.api.nvidia.com`). Reuses `NVIDIA_API_KEY` by default — no separate key required:
-
-```bash
-# Optional overrides; defaults shown.
 NVIDIA_VISION_API_KEY=your_nvidia_vision_key   # falls back to NVIDIA_API_KEY
 NVIDIA_VISION_MODEL=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
 ```
 
-Optional additional OpenAI-compatible provider:
+### Optional Cross-Check Provider
 
 ```bash
 ADDITIONAL_OPENAI_COMPATIBLE_API_KEY=your_key
@@ -45,49 +239,147 @@ ADDITIONAL_OPENAI_COMPATIBLE_MODEL=gpt-4o-mini
 ADDITIONAL_OPENAI_COMPATIBLE_NAME=OpenAI
 ```
 
-## Architecture
+> **Warning:** Do NOT set any model to `mistralai/mistral-large-3-675b-instruct-2512` — it's not in the NVIDIA NIM catalog and every call will 404.
 
-Route handlers under `src/app/api` keep model keys server-side. The UI sends a structured request to `/api/educate`; the orchestrator creates a textbook-quality draft, verifies/restructures it, and returns a stable JSON schema for the frontend workspace.
+---
 
-Cloudflare Workers / AI Gateway is a recommended future edge layer for rate limiting, caching repeated prompts, observability, and dynamic model routing. The current app is Vercel-compatible without requiring Workers.
+## Auth Flow
 
-## Getting Started
+1. User visits `/` → landing page → clicks "Get started" → navigates to `/login`
+2. Enters email → `POST /api/auth/signup` → Resend sends 6-digit OTP
+3. Enters OTP → `POST /api/auth/verify` → server verifies, creates cloud storage topic for new users, mints JWT
+4. JWT set as `forge_session` HttpOnly cookie (7-day, SameSite=Lax)
+5. Redirected to `/app` → `AuthGuard` checks `GET /api/auth/me` → renders workspace
+6. Session sliding refresh: if JWT is >6 days old, `/api/auth/me` mints a fresh 7-day token
+7. OTP: in-memory store, 5-min TTL, 5 attempts/hour rate limit per email
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Data Sync
+
+All user data (history, solver results, chat sessions, theme) syncs automatically to the cloud:
+
+- **Auto-save**: 5-second debounced writes via `useSync` hook — every state change kicks the timer
+- **Page unload**: `beforeunload` handler fires `navigator.sendBeacon` to flush the current snapshot
+- **Load on login**: cloud data replaces local state; if cloud is empty and local has data, a migration prompt asks the user to import or start fresh
+- **localStorage**: used as the primary working copy; cloud sync is the backup layer
+- **Completely invisible**: users never see any storage-related UI — sync happens silently
+
+### localStorage Keys
+
+| Key | Content | Synced |
+|-----|---------|--------|
+| `eduforge:history` | `SidebarItem[]` (max 25) | Yes |
+| `eduforge:responses` | `Record<string, EducationResponse>` | Yes |
+| `eduforge:chats` | `Record<string, ChatSession>` | Yes |
+| `eduforge:theme` | `"dark"` or `"light"` | Yes |
+| `eduforge:onboarding` | `"done"` | No |
+
+---
+
+## Share URLs
+
+Solver results and chat threads can be shared via public URLs:
+
+1. Click the share button on any solve result or chat thread
+2. `POST /api/share` saves the content to a public storage topic, returns a slug
+3. The shareable URL is `https://your-domain.com/s/<slug>`
+4. `/s/[slug]` renders the content read-only with full KaTeX/markdown support
+5. No login required to view shared content
+
+---
+
+## Design System
+
+All styles live in `src/app/globals.css` (~5300 lines). The design system uses CSS custom properties for theming:
+
+```css
+--bg              /* page background */
+--bg-elev         /* elevated surface (cards, modals) */
+--ink             /* primary text */
+--ink-muted       /* secondary text */
+--accent          /* orange brand color */
+--accent-soft     /* light orange background */
+--accent-strong   /* darker orange for hover */
+--line            /* border color */
+--line-strong     /* stronger border */
+--shadow-soft     /* box-shadow */
+--user-bubble     /* chat user message bg */
+--muted           /* very faint text */
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Theme is toggled via `<html data-theme="dark|light">` with CSS `[data-theme="light"]` overrides.
 
-## Verification
+**Mobile breakpoint:** 720px. The sidebar becomes an off-canvas drawer on mobile.
 
-```bash
-npm run lint
-npm run build
-```
+---
 
-## Research artifacts
+## Routes
 
-`research/gpai-research-report.md` documents GPAI feature findings, logged-in observations, architecture decisions, and serverless recommendations.
+| Route | Auth | Purpose |
+|-------|------|---------|
+| `/` | No | Public landing page — hero, feature cards, how-it-works |
+| `/login` | No | Split-screen login — feature showcase + email OTP form |
+| `/app` | Yes | Main workspace — solver, chat, visualizer, etc. |
+| `/s/[slug]` | No | Read-only shared content viewer |
+
+---
+
+## API Routes
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/auth/signup` | POST | Send OTP email |
+| `/api/auth/login` | POST | Same as signup (returning users) |
+| `/api/auth/verify` | POST | Verify OTP → JWT cookie |
+| `/api/auth/me` | GET | Check session + sliding refresh |
+| `/api/auth/logout` | POST | Clear JWT cookie |
+| `/api/sync/save` | POST | Save user data to cloud |
+| `/api/sync/load` | GET | Load user data from cloud |
+| `/api/share` | POST | Create shareable link |
+| `/api/share/load` | GET | Load shared content by slug |
+| `/api/educate/stream` | POST | Streaming step-by-step solver |
+| `/api/educate` | POST | Non-streaming solver |
+| `/api/chat` | POST | Streaming chat |
+| `/api/quiz` | POST | Generate quiz from problem |
+| `/api/debate` | POST | 4-model debate |
+| `/api/visualize` | POST | Diagram / image generation |
+| `/api/parse-pdf` | POST | PDF text extraction |
+| `/api/web-search` | POST | Web search for chat context |
+| `/api/youtube-transcript` | POST | Fetch YouTube captions |
+
+All API routes run on Node.js runtime with `maxDuration = 60s` (Vercel Hobby compatible).
+
+---
 
 ## Deploy on Vercel
 
-This project is Vercel-ready out of the box. To deploy:
+1. Push to GitHub or import directly into Vercel
+2. Add environment variables (see table above)
+3. Click **Deploy** — no `vercel.json` needed, Next.js 16 + Turbopack auto-detected
 
-1. Push this repo to GitHub (or import directly into Vercel from the dashboard).
-2. In Vercel → Project → Settings → Environment Variables, add at minimum:
-   - `NVIDIA_API_KEY` — your NVIDIA NIM key (required for live model calls; the app falls back to deterministic demo output without it)
-   - Optionally any of the model overrides listed in the **Environment** section above (e.g. `NVIDIA_SOLVER_MODEL`, `NVIDIA_VISION_API_KEY`)
-3. Click **Deploy**. No `vercel.json` is required — Next.js 16 + Turbopack are detected automatically.
+PDF parsing uses [`unpdf`](https://www.npmjs.com/package/unpdf) (pure JS, no native binaries). Mermaid diagrams render client-side.
 
-All API routes (`/api/educate`, `/api/educate/stream`, `/api/chat`, `/api/visualize`, `/api/parse-pdf`) run on the Node.js runtime with `maxDuration = 60`s, which works on the Vercel Hobby plan. Upgrade to Pro if you need longer timeouts for very large generations.
+---
 
-PDF parsing uses [`unpdf`](https://www.npmjs.com/package/unpdf), which is pure-JS and works on Vercel without any native binary. Mermaid diagrams are rendered fully on the client.
+## Key Technical Notes
+
+- **Next.js 16** — has breaking changes vs. training data. Read `node_modules/next/dist/docs/` before writing code.
+- **All state lives in `EducationApp.tsx`** — no Redux/Zustand. Props drilled to child views.
+- **Lucide React v1.12.0** — `Youtube` icon doesn't exist; use `Video` or `CirclePlay`.
+- **OTP store is in-memory** — serverless cold starts lose pending OTPs (acceptable for MVP).
+- **Cloud storage limit** — registry pinned message caps at 4096 chars (~50 users). Document-based registry needed for scale.
+- **`buildSnapshot` caps at 25 history items** — older items pruned from sync but remain in localStorage.
+- **Vision limit** — `MAX_INLINE_IMAGE_BYTES = 1.7 MB`. Client-side compression keeps uploads under this.
+
+---
+
+## Research Artifacts
+
+`research/gpai-research-report.md` documents GPAI feature findings, architecture decisions, and serverless recommendations.
+
+---
+
+## License
+
+Private repository. All rights reserved.
