@@ -2318,6 +2318,37 @@ a {
   opacity: 0.7;
 }
 
+.debate-expand-section {
+  margin-top: 12px;
+}
+.debate-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.debate-expand-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.debate-chevron-up {
+  transform: rotate(180deg);
+}
+.debate-all-responses {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev);
+}
+
 .regenerate-btn {
   display: inline-flex;
   align-items: center;

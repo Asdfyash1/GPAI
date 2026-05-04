@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Check, Link as LinkIcon, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, Link as LinkIcon, RefreshCw } from "lucide-react";
 import type {
   ChatMessage,
   ModelChoice,
@@ -132,19 +132,23 @@ export function ChatView({
             entries: Array<{ label: string; response: string; durationMs: number }>;
             judge: { winner: string; reasoning: string };
           };
-          let md = `## Debate Results\n\n`;
-          for (const e of data.entries) {
-            const isWinner = e.label === data.judge.winner;
-            md += `### ${e.label}${isWinner ? " 🏆" : ""} *(${(e.durationMs / 1000).toFixed(1)}s)*\n\n`;
-            md += `${e.response}\n\n---\n\n`;
+          const winner = data.entries.find((e) => e.label === data.judge.winner) ?? data.entries[0];
+          let winnerMd = `### 🏆 ${winner.label} *(${(winner.durationMs / 1000).toFixed(1)}s)*\n\n`;
+          winnerMd += `${winner.response}\n\n`;
+          winnerMd += `**Judge's verdict:** ${data.judge.reasoning}`;
+          const otherEntries = data.entries.filter((e) => e.label !== winner.label);
+          let otherMd = "";
+          for (const e of otherEntries) {
+            otherMd += `### ${e.label} *(${(e.durationMs / 1000).toFixed(1)}s)*\n\n`;
+            otherMd += `${e.response}\n\n---\n\n`;
           }
-          md += `**Judge's verdict:** ${data.judge.winner} wins — ${data.judge.reasoning}`;
+          const fullContent = `<!-- DEBATE_WINNER -->\n${winnerMd}\n<!-- DEBATE_ALL -->\n${otherMd}`;
           onMessagesChange([
             ...next,
             {
               id: `a_${Date.now()}`,
               role: "assistant",
-              content: md,
+              content: fullContent,
               createdAt: new Date().toISOString(),
             },
           ]);
@@ -485,6 +489,10 @@ function AssistantBlock({
   content: string;
   streaming?: boolean;
 }) {
+  const isDebate = content.includes("<!-- DEBATE_WINNER -->");
+  if (isDebate && !streaming) {
+    return <DebateBlock content={content} />;
+  }
   const { content: visibleContent, sources } = extractSources(content);
   const mermaidMatch = !streaming ? visibleContent.match(MERMAID_RE) : null;
   const mermaidCode = mermaidMatch ? mermaidMatch[1].trim() : null;
@@ -502,6 +510,37 @@ function AssistantBlock({
         )}
         {streaming && <span className="streaming-cursor" aria-hidden />}
         {!streaming && <SourcesPills sources={sources} />}
+      </div>
+    </div>
+  );
+}
+
+function DebateBlock({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const parts = content.split("<!-- DEBATE_ALL -->");
+  const winnerPart = (parts[0] ?? "").replace("<!-- DEBATE_WINNER -->\n", "").trim();
+  const allPart = (parts[1] ?? "").trim();
+  return (
+    <div className="chat-row chat-row-assistant">
+      <div className="assistant-content">
+        <MathMarkdown content={winnerPart} />
+        {allPart && (
+          <div className="debate-expand-section">
+            <button
+              type="button"
+              className="debate-expand-btn"
+              onClick={() => setExpanded((p) => !p)}
+            >
+              <ChevronDown size={14} className={expanded ? "debate-chevron-up" : ""} />
+              {expanded ? "Hide other responses" : "View all responses"}
+            </button>
+            {expanded && (
+              <div className="debate-all-responses">
+                <MathMarkdown content={allPart} />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
