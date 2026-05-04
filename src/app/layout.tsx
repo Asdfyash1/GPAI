@@ -22,6 +22,24 @@ export const metadata: Metadata = {
       { url: "/favicon.ico", sizes: "any" },
     ],
   },
+  metadataBase: new URL("https://forge-gpai.vercel.app"),
+  openGraph: {
+    type: "website",
+    title: "Forge — STEM Copilot",
+    description:
+      "Step-by-step AI solver with cross-check verification, multi-model chat, visualizer, cheatsheets, and more.",
+    siteName: "Forge",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Forge — STEM Copilot",
+    description:
+      "AI-powered STEM education platform with solver, chat, visualizer, and more.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
