@@ -1,15 +1,11 @@
 "use client";
 
-import { Loader2, Mail, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, X } from "lucide-react";
 import { useState } from "react";
 
 export type AuthedUser = {
   email: string;
   emailHash: string;
-  // True the very first time this email completed verification (no
-  // prior cloud data). EducationApp uses this to decide whether to
-  // offer the localStorage → cloud migration prompt: only when this
-  // device has data AND the cloud is fresh.
   isNew: boolean;
 };
 
@@ -20,51 +16,33 @@ type AuthModalProps = {
 };
 
 export function AuthModal({ open, onClose, onAuth }: AuthModalProps) {
-  const [step, setStep] = useState<"email" | "otp">("email");
+  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
 
-  const handleSendCode = async () => {
+  const handleSubmit = async () => {
     if (!email || !email.includes("@")) {
       setError("Enter a valid email address.");
       return;
     }
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Failed to send code");
-      setStep("otp");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async () => {
-    if (!code || code.length !== 6) {
-      setError("Enter the 6-digit code from your email.");
+    if (!password || password.length < 6) {
+      setError("Password must be at least 6 characters.");
       return;
     }
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch("/api/auth/verify", {
+      const endpoint = mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email, password }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
@@ -73,19 +51,19 @@ export function AuthModal({ open, onClose, onAuth }: AuthModalProps) {
         isNew?: boolean;
         error?: string;
       };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Verification failed");
-      if (!data.emailHash) throw new Error("Verification response missing emailHash");
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Authentication failed");
+      if (!data.emailHash) throw new Error("Authentication response missing emailHash");
       onAuth({
         email: data.email ?? email,
         emailHash: data.emailHash,
         isNew: !!data.isNew,
       });
       onClose();
-      setStep("email");
+      setMode("login");
       setEmail("");
-      setCode("");
+      setPassword("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Verification failed");
+      setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -99,70 +77,60 @@ export function AuthModal({ open, onClose, onAuth }: AuthModalProps) {
         </button>
 
         <div className="auth-header">
-          <Mail size={28} className="auth-icon" />
-          <h2>{step === "email" ? "Sign in to Forge" : "Enter verification code"}</h2>
+          <Lock size={28} className="auth-icon" />
+          <h2>{mode === "login" ? "Sign in to Forge" : "Create your account"}</h2>
           <p>
-            {step === "email"
-              ? "We'll send a 6-digit code to your email."
-              : `Code sent to ${email}`}
+            {mode === "login"
+              ? "Enter your email and password."
+              : "Create a new account to get started."}
           </p>
         </div>
 
         {error && <p className="auth-error">{error}</p>}
 
-        {step === "email" ? (
-          <div className="auth-form">
+        <div className="auth-form">
+          <input
+            type="email"
+            className="auth-input"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoFocus
+          />
+          <div className="auth-password-wrap">
             <input
-              type="email"
+              type={showPassword ? "text" : "password"}
               className="auth-input"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
-              autoFocus
+              placeholder="Password (min 6 chars)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
             <button
               type="button"
-              className="auth-submit"
-              onClick={handleSendCode}
-              disabled={loading}
+              className="auth-password-toggle"
+              onClick={() => setShowPassword((p) => !p)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {loading ? <Loader2 size={16} className="spin" /> : "Send code"}
+              {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </div>
-        ) : (
-          <div className="auth-form">
-            <input
-              type="text"
-              className="auth-input auth-otp"
-              placeholder="000000"
-              maxLength={6}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-              autoFocus
-            />
-            <button
-              type="button"
-              className="auth-submit"
-              onClick={handleVerify}
-              disabled={loading}
-            >
-              {loading ? <Loader2 size={16} className="spin" /> : "Verify"}
-            </button>
-            <button
-              type="button"
-              className="auth-back"
-              onClick={() => {
-                setStep("email");
-                setCode("");
-                setError(null);
-              }}
-            >
-              Use a different email
-            </button>
-          </div>
-        )}
+          <button
+            type="button"
+            className="auth-submit"
+            onClick={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? <Loader2 size={16} className="spin" /> : mode === "login" ? "Sign in" : "Create account"}
+          </button>
+          <button
+            type="button"
+            className="auth-back"
+            onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); }}
+          >
+            {mode === "login" ? "Don\u2019t have an account? Sign up" : "Already have an account? Sign in"}
+          </button>
+        </div>
       </div>
     </div>
   );

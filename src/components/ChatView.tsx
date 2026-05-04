@@ -73,6 +73,7 @@ export function ChatView({
   const [webEnabled, setWebEnabled] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [responseTime, setResponseTime] = useState<number | null>(null);
+  const [debateLoading, setDebateLoading] = useState(false);
   const streamStartRef = useRef<number>(0);
   const stream = useStream();
   const personalization = usePersonalization();
@@ -104,6 +105,7 @@ export function ChatView({
 
     // Debate mode: POST to /api/debate, format result as structured markdown
     if (modelChoice === "debate") {
+      setDebateLoading(true);
       (async () => {
         try {
           const res = await fetch("/api/debate", {
@@ -156,6 +158,8 @@ export function ChatView({
               createdAt: new Date().toISOString(),
             },
           ]);
+        } finally {
+          setDebateLoading(false);
         }
       })();
       return;
@@ -352,7 +356,7 @@ export function ChatView({
           {stream.isStreaming && streamText && (
             <AssistantBlock content={streamText} streaming />
           )}
-          {stream.isStreaming && !streamText && <ThinkingDots />}
+          {(stream.isStreaming || debateLoading) && !streamText && <ThinkingDots />}
           {!stream.isStreaming && messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && (
             <div className="chat-response-meta">
               {responseTime !== null && (
@@ -380,7 +384,7 @@ export function ChatView({
           onChange={setInput}
           onSubmit={() => send()}
           onStop={stream.stop}
-          isStreaming={stream.isStreaming}
+          isStreaming={stream.isStreaming || debateLoading}
           attachments={attachments}
           onAttachmentsChange={setAttachments}
           modelChoice={modelChoice}

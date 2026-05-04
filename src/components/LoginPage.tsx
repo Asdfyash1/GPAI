@@ -8,10 +8,11 @@ import {
   BookOpen,
   Brain,
   CirclePlay,
+  Eye,
+  EyeOff,
   ImageIcon,
   Loader2,
   Lock,
-  Mail,
   MessageSquare,
   Shield,
   Sigma,
@@ -31,53 +32,36 @@ const HIGHLIGHTS = [
 
 export function LoginPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"email" | "otp">("email");
+  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSendCode = async () => {
+  const handleSubmit = async () => {
     if (!email || !email.includes("@")) {
       setError("Enter a valid email address.");
       return;
     }
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Failed to send code");
-      setStep("otp");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async () => {
-    if (!code || code.length !== 6) {
-      setError("Enter the 6-digit code from your email.");
+    if (!password || password.length < 6) {
+      setError("Password must be at least 6 characters.");
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/auth/verify", {
+      const endpoint = mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email, password }),
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Verification failed");
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Authentication failed");
       router.push("/app");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Verification failed");
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -142,99 +126,85 @@ export function LoginPage() {
           </Link>
 
           <div className="login-header">
-            {step === "email" ? (
-              <>
-                <div className="login-icon-wrap">
-                  <Sparkles size={28} />
-                </div>
-                <h1>Welcome back</h1>
-                <p>Sign in or create an account to continue.</p>
-              </>
-            ) : (
-              <>
-                <div className="login-icon-wrap">
-                  <Mail size={28} />
-                </div>
-                <h1>Check your email</h1>
-                <p>
-                  We sent a 6-digit code to <strong>{email}</strong>
-                </p>
-              </>
-            )}
+            <div className="login-icon-wrap">
+              <Sparkles size={28} />
+            </div>
+            <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
+            <p>{mode === "login" ? "Sign in to continue to Forge." : "Get started with Forge for free."}</p>
           </div>
 
           {error && <p className="login-error">{error}</p>}
 
-          {step === "email" ? (
-            <div className="login-form">
-              <label className="login-label" htmlFor="login-email">
-                Email address
-              </label>
+          <div className="login-form">
+            <label className="login-label" htmlFor="login-email">
+              Email address
+            </label>
+            <input
+              id="login-email"
+              type="email"
+              className="login-input"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoFocus
+            />
+
+            <label className="login-label" htmlFor="login-password">
+              Password
+            </label>
+            <div className="login-password-wrap">
               <input
-                id="login-email"
-                type="email"
+                id="login-password"
+                type={showPassword ? "text" : "password"}
                 className="login-input"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
-                autoFocus
+                placeholder="At least 6 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
               />
               <button
                 type="button"
-                className="login-submit"
-                onClick={handleSendCode}
-                disabled={loading}
+                className="login-password-toggle"
+                onClick={() => setShowPassword((p) => !p)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
-                {loading ? (
-                  <Loader2 size={16} className="spin" />
-                ) : (
-                  "Continue with email"
-                )}
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-          ) : (
-            <div className="login-form">
-              <label className="login-label" htmlFor="login-otp">
-                Verification code
-              </label>
-              <input
-                id="login-otp"
-                type="text"
-                className="login-input login-otp-input"
-                placeholder="000000"
-                maxLength={6}
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-                autoFocus
-              />
-              <button
-                type="button"
-                className="login-submit"
-                onClick={handleVerify}
-                disabled={loading}
-              >
-                {loading ? (
-                  <Loader2 size={16} className="spin" />
-                ) : (
-                  "Verify & sign in"
-                )}
-              </button>
-              <button
-                type="button"
-                className="login-back"
-                onClick={() => {
-                  setStep("email");
-                  setCode("");
-                  setError(null);
-                }}
-              >
-                <ArrowLeft size={14} />
-                Use a different email
-              </button>
-            </div>
-          )}
+
+            <button
+              type="button"
+              className="login-submit"
+              onClick={handleSubmit}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 size={16} className="spin" />
+              ) : mode === "login" ? (
+                "Sign in"
+              ) : (
+                "Create account"
+              )}
+            </button>
+
+            <p className="login-switch">
+              {mode === "login" ? (
+                <>
+                  Don&apos;t have an account?{" "}
+                  <button type="button" className="login-switch-btn" onClick={() => { setMode("signup"); setError(null); }}>
+                    Sign up
+                  </button>
+                </>
+              ) : (
+                <>
+                  Already have an account?{" "}
+                  <button type="button" className="login-switch-btn" onClick={() => { setMode("login"); setError(null); }}>
+                    Sign in
+                  </button>
+                </>
+              )}
+            </p>
+          </div>
 
           <p className="login-footer-text">
             By continuing, you agree to use Forge responsibly.

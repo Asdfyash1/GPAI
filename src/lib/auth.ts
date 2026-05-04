@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
+import crypto from "crypto";
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? "dev-secret-change-me");
 const COOKIE_NAME = "forge_session";
@@ -60,44 +61,29 @@ export function getTokenFromRequest(request: Request): string | null {
   return match?.[1] ?? null;
 }
 
-// ── OTP store (in-memory, TTL 5 min) ──
+// ── Password hashing (PBKDF2 via Node crypto) ──
 
-const otpStore = new Map<string, { code: string; expires: number; attempts: number }>();
+const ITERATIONS = 100_000;
+const KEY_LEN = 64;
+const DIGEST = "sha512";
 
-export function generateOTP(email: string): string {
-  const normalized = email.toLowerCase().trim();
-
-  // Rate limit: max 5 OTPs per email per hour
-  const existing = otpStore.get(normalized);
-  if (existing && existing.attempts >= 5 && existing.expires > Date.now()) {
-    throw new Error("Too many attempts. Try again in a few minutes.");
-  }
-
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  otpStore.set(normalized, {
-    code,
-    expires: Date.now() + 5 * 60 * 1000,
-    attempts: (existing?.attempts ?? 0) + 1,
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.randomBytes(16).toString("hex");
+  return new Promise((resolve, reject) => {
+    crypto.pbkdf2(password, salt, ITERATIONS, KEY_LEN, DIGEST, (err, derivedKey) => {
+      if (err) reject(err);
+      else resolve(`${salt}:${derivedKey.toString("hex")}`);
+    });
   });
-
-  // Clean up expired entries
-  for (const [key, val] of otpStore) {
-    if (val.expires < Date.now()) otpStore.delete(key);
-  }
-
-  return code;
 }
 
-export function verifyOTP(email: string, code: string): boolean {
-  const normalized = email.toLowerCase().trim();
-  const entry = otpStore.get(normalized);
-  if (!entry) return false;
-  if (entry.expires < Date.now()) {
-    otpStore.delete(normalized);
-    return false;
-  }
-  if (entry.code !== code) return false;
-
-  otpStore.delete(normalized);
-  return true;
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) return false;
+  return new Promise((resolve, reject) => {
+    crypto.pbkdf2(password, salt, ITERATIONS, KEY_LEN, DIGEST, (err, derivedKey) => {
+      if (err) reject(err);
+      else resolve(derivedKey.toString("hex") === hash);
+    });
+  });
 }

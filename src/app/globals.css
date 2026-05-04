@@ -705,6 +705,23 @@ a {
 .auth-input:focus {
   border-color: var(--accent, #f97316);
 }
+.auth-password-wrap {
+  position: relative;
+}
+.auth-password-wrap .auth-input {
+  padding-right: 40px;
+}
+.auth-password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 2px;
+}
 .auth-otp {
   text-align: center;
   font-size: 24px;
@@ -5243,12 +5260,36 @@ a {
   border-color: var(--accent);
 }
 
-.login-otp-input {
+.login-password-wrap {
+  position: relative;
+}
+.login-password-wrap .login-input {
+  padding-right: 44px;
+}
+.login-password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+.login-switch {
   text-align: center;
-  font-size: 28px;
-  letter-spacing: 10px;
-  font-weight: 700;
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--ink-muted);
+  margin-top: 4px;
+}
+.login-switch-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .login-submit {
