@@ -71,6 +71,13 @@ export function EducationApp() {
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
+  // Mirrors `history` so async callbacks (hydrateFromCloud) that run
+  // long after mount always see the current array length, not the
+  // stale [] captured in the mount-time closure.
+  const historyRef = useRef<SidebarItem[]>([]);
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
   const [visualizerSeed, setVisualizerSeed] = useState<string>("");
   // Persist-after-hydrate guard: until the initial localStorage load runs
   // we MUST NOT write empty state back to disk, otherwise reloading the
@@ -114,7 +121,10 @@ export function EducationApp() {
       }
       hydrated.current = true;
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
-      if (nextHistory) setHistory(nextHistory);
+      if (nextHistory) {
+        historyRef.current = nextHistory;
+        setHistory(nextHistory);
+      }
       if (nextStore) setResponseStore(nextStore);
       if (nextChats) setChatSessions(nextChats);
 
@@ -191,7 +201,12 @@ export function EducationApp() {
           return;
         }
         // Cloud empty: do we have local data worth importing?
-        const localCount = history.length;
+        // Read from the ref — NOT the `history` state var — because
+        // this function may execute from a stale mount-time closure
+        // where `history` is still the initial `[]`. The ref is kept
+        // in sync via a useEffect so it always reflects the latest
+        // localStorage-hydrated value.
+        const localCount = historyRef.current.length;
         if (allowMigrationPrompt && localCount > 0) {
           setMigrationOpen(true);
           // Stay un-ready so auto-save doesn't fire until the user picks.
@@ -243,11 +258,6 @@ export function EducationApp() {
     return () => {
       cancelled = true;
     };
-    // hydrateFromCloud is intentionally not in deps — a new closure
-    // every render would re-trigger this on every state change and
-    // re-fetch /api/auth/me unnecessarily. The mount-time call is the
-    // only one we want.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Lock background scroll while the off-canvas drawer is open so the
