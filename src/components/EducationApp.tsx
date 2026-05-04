@@ -526,7 +526,8 @@ export function EducationApp() {
   };
 
   return (
-    <div className={`app-shell theme-${theme}`}>
+    <div className={`app-shell theme-${theme}`} role="application" aria-label="Forge workspace">
+      <a href="#main-content" className="skip-link">Skip to content</a>
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((p) => !p)}
@@ -559,7 +560,7 @@ export function EducationApp() {
         theme={theme}
         onThemeChange={setTheme}
       />
-      <main className="workspace">
+      <main className="workspace" id="main-content">
         <header className="workspace-topbar">
           <button
             type="button"

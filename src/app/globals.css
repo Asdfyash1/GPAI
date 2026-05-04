@@ -81,6 +81,31 @@ button {
   color: inherit;
 }
 
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+[role="tablist"] [role="tab"] {
+  cursor: pointer;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 4px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.skip-link:focus {
+  left: 8px;
+}
+
 a {
   color: inherit;
   text-decoration: none;
