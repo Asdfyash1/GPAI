@@ -4849,21 +4849,124 @@ a {
 }
 
 /* ================================================================
-   LOGIN PAGE
+   LOGIN PAGE — Split-screen layout
    ================================================================ */
 
 .login-page {
   min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--bg);
+}
+
+/* ── Left: feature showcase ── */
+.login-showcase {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
-  padding: 24px;
+  padding: 48px 40px;
+  background:
+    linear-gradient(135deg, var(--accent-soft) 0%, transparent 60%),
+    var(--bg);
+  border-right: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+}
+.login-showcase::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 80%, var(--accent-soft) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 140, 50, 0.06) 0%, transparent 40%);
+  pointer-events: none;
+}
+.login-showcase-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 440px;
+}
+.login-showcase .login-brand {
+  margin-bottom: 36px;
+}
+.login-showcase-title {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--ink);
+  margin: 0 0 12px;
+}
+.login-showcase-accent {
+  color: var(--accent);
+}
+.login-showcase-subtitle {
+  font-size: 15px;
+  color: var(--ink-muted);
+  line-height: 1.6;
+  margin: 0 0 32px;
+}
+
+/* Feature highlight list */
+.login-highlights {
+  list-style: none;
+  margin: 0 0 36px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login-highlight-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.login-highlight-icon {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Trust / social-proof badges */
+.login-showcase-proof {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.login-proof-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.login-proof-row svg {
+  color: var(--accent);
+  min-width: 14px;
+}
+
+/* ── Right: auth form panel ── */
+.login-form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 40px;
 }
 
 .login-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -4881,6 +4984,9 @@ a {
   gap: 8px;
   text-decoration: none;
   margin-bottom: 32px;
+}
+.login-brand-mobile {
+  display: none;
 }
 
 .login-header {
@@ -4992,7 +5098,10 @@ a {
   color: var(--ink-muted);
   font-size: 13px;
   cursor: pointer;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 4px;
   transition: color 0.15s;
 }
@@ -5005,6 +5114,20 @@ a {
   text-align: center;
 }
 
+.login-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.login-home-link:hover {
+  color: var(--accent);
+}
+
 /* ── Auth guard loading ── */
 .auth-guard-loading {
   min-height: 100dvh;
@@ -5015,7 +5138,22 @@ a {
   color: var(--accent);
 }
 
-/* ── Login mobile ── */
+/* ── Login responsive ── */
+@media (max-width: 900px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+  .login-showcase {
+    display: none;
+  }
+  .login-form-panel {
+    min-height: 100dvh;
+    padding: 24px;
+  }
+  .login-brand-mobile {
+    display: inline-flex;
+  }
+}
 @media (max-width: 480px) {
   .login-card {
     padding: 32px 24px;
