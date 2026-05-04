@@ -2,7 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const nvidiaBaseUrl = "https://integrate.api.nvidia.com/v1";
 
@@ -18,6 +18,7 @@ type DebateEntry = {
   label: string;
   response: string;
   durationMs: number;
+  error?: string;
 };
 
 type JudgeResult = {
@@ -47,9 +48,11 @@ export async function POST(request: Request) {
 
   const system =
     body.system ??
-    "You are a knowledgeable STEM tutor. Answer clearly with examples and LaTeX for math.";
+    "You are a knowledgeable STEM tutor. Answer clearly and concisely with examples and LaTeX for math. Keep your response focused and under 500 words.";
 
   const entries: DebateEntry[] = [];
+  const errors: Array<{ label: string; error: string }> = [];
+
   const settled = await Promise.allSettled(
     DEBATE_MODELS.map(async (m) => {
       const start = Date.now();
@@ -58,7 +61,7 @@ export async function POST(request: Request) {
         system,
         prompt: body.prompt,
         temperature: 0.3,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 2048,
       });
       return {
         model: m.id,
@@ -69,27 +72,41 @@ export async function POST(request: Request) {
     }),
   );
 
-  for (const s of settled) {
+  for (let i = 0; i < settled.length; i++) {
+    const s = settled[i];
     if (s.status === "fulfilled") {
       entries.push(s.value);
+    } else {
+      const label = DEBATE_MODELS[i].label;
+      const errMsg = s.reason instanceof Error ? s.reason.message : "Failed";
+      errors.push({ label, error: errMsg });
+      entries.push({
+        model: DEBATE_MODELS[i].id,
+        label,
+        response: `*Model failed to respond: ${errMsg.slice(0, 200)}*`,
+        durationMs: Date.now(),
+        error: errMsg,
+      });
     }
   }
 
-  if (entries.length === 0) {
+  const successEntries = entries.filter((e) => !e.error);
+
+  if (successEntries.length === 0) {
     return Response.json(
-      { error: "All models failed to respond." },
+      { error: `All models failed to respond. Errors: ${errors.map((e) => `${e.label}: ${e.error}`).join("; ")}` },
       { status: 502 },
     );
   }
 
   let judge: JudgeResult = {
-    winner: entries[0].label,
+    winner: successEntries[0].label,
     reasoning: "Only one model responded successfully.",
   };
 
-  if (entries.length >= 2) {
+  if (successEntries.length >= 2) {
     try {
-      const judgePrompt = buildJudgePrompt(body.prompt, entries);
+      const judgePrompt = buildJudgePrompt(body.prompt, successEntries);
       const judgeResult = await generateText({
         model: provider.chatModel("meta/llama-3.3-70b-instruct"),
         system:
@@ -98,11 +115,11 @@ export async function POST(request: Request) {
         temperature: 0.1,
         maxOutputTokens: 512,
       });
-      const parsed = parseJudgeResponse(judgeResult.text, entries);
+      const parsed = parseJudgeResponse(judgeResult.text, successEntries);
       if (parsed) judge = parsed;
     } catch {
       judge = {
-        winner: entries.reduce((a, b) =>
+        winner: successEntries.reduce((a, b) =>
           a.response.length > b.response.length ? a : b,
         ).label,
         reasoning: "Judge model unavailable; selected longest response.",
@@ -113,6 +130,7 @@ export async function POST(request: Request) {
   return Response.json({
     entries,
     judge,
+    errors: errors.length > 0 ? errors : undefined,
   });
 }
 
