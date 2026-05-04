@@ -52,7 +52,10 @@ export function EducationApp() {
   // Sentinel surfaced via aria-live for non-modal users ("Saved" /
   // "Saving…" / "Couldn't sync"). We only render it when a user is
   // signed in so logged-out users don't see noise.
-  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  // Sync status tracked internally — intentionally NOT surfaced in the
+  // UI so users never see Telegram storage details. The setter is still
+  // called by useSync, logout, and migration handlers.
+  const [, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [modelChoice, setModelChoice] = useState<ModelChoice>("auto");
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
   const [solverPrompt, setSolverPrompt] = useState("");
@@ -332,6 +335,22 @@ export function EducationApp() {
     snapshot: cloudSnapshot,
     onStatusChange: (next) => setSyncStatus(next),
   });
+
+  // Flush unsaved state to the server when the tab is closing so the
+  // last few seconds of edits (inside the 5s debounce window) aren't
+  // lost. `navigator.sendBeacon` fires a non-blocking POST that
+  // survives page unload — ideal for this "best-effort last save".
+  const snapshotRef = useRef(cloudSnapshot);
+  useEffect(() => { snapshotRef.current = cloudSnapshot; }, [cloudSnapshot]);
+  useEffect(() => {
+    if (!user || !syncReady) return;
+    const flush = () => {
+      const payload = JSON.stringify({ data: snapshotRef.current });
+      navigator.sendBeacon("/api/sync/save", new Blob([payload], { type: "application/json" }));
+    };
+    window.addEventListener("beforeunload", flush);
+    return () => window.removeEventListener("beforeunload", flush);
+  }, [user, syncReady]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !hydrated.current) return;
@@ -725,11 +744,6 @@ export function EducationApp() {
           setSyncReady(true);
         }}
       />
-      {user && syncStatus === "error" && (
-        <div className="sync-status sync-status-error" role="status" aria-live="polite">
-          Couldn&rsquo;t sync to your account. We&rsquo;ll retry on your next change.
-        </div>
-      )}
     </div>
   );
 }
