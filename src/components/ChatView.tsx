@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { RefreshCw } from "lucide-react";
+import { Check, Link as LinkIcon, RefreshCw } from "lucide-react";
 import type {
   ChatMessage,
   ModelChoice,
@@ -355,6 +355,7 @@ export function ChatView({
               {responseTime !== null && (
                 <span className="response-time">Answered in {responseTime}s</span>
               )}
+              <ChatShareButton messages={messages} />
               <button
                 type="button"
                 className="regenerate-btn"
@@ -496,5 +497,55 @@ function ThinkingDots() {
         <span /> <span /> <span />
       </div>
     </div>
+  );
+}
+
+function ChatShareButton({ messages }: { messages: ChatMessage[] }) {
+  const [status, setStatus] = useState<"idle" | "sharing" | "copied">("idle");
+  const handleClick = async () => {
+    if (typeof window === "undefined") return;
+    setStatus("sharing");
+    const firstUser = messages.find((m) => m.role === "user");
+    const title = firstUser?.content?.trim().slice(0, 60) || "Forge chat";
+    try {
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "chat",
+          title,
+          payload: { messages },
+        }),
+      });
+      let shareUrl: string;
+      if (res.ok) {
+        const data = (await res.json()) as { url: string };
+        shareUrl = `${window.location.origin}${data.url}`;
+      } else {
+        shareUrl = window.location.href;
+      }
+      if (navigator.share) {
+        await navigator.share({ title, url: shareUrl }).catch(() => {});
+      }
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+      setStatus("copied");
+      setTimeout(() => setStatus("idle"), 1600);
+    } catch {
+      setStatus("idle");
+    }
+  };
+  return (
+    <button
+      className="icon-button"
+      type="button"
+      aria-label={status === "copied" ? "Link copied" : "Share chat"}
+      title={status === "copied" ? "Link copied" : "Share chat"}
+      onClick={handleClick}
+      disabled={status === "sharing"}
+    >
+      {status === "copied" ? <Check size={16} /> : <LinkIcon size={16} />}
+    </button>
   );
 }

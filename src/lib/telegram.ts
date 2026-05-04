@@ -201,3 +201,82 @@ export async function userExists(emailHash: string): Promise<boolean> {
   const { registry } = await readRegistry(token);
   return !!registry[emailHash]?.threadId;
 }
+
+// ── Shared content storage ──
+// Uses a dedicated "shared:public" topic in the same channel.
+// Each share is uploaded as a JSON file; the slug → fileId mapping
+// is stored inside the user registry under a special "__shares" key.
+
+type ShareRegistry = Record<string, string>; // slug → fileId
+
+async function readShareRegistry(token: string): Promise<{ shares: ShareRegistry; registry: Registry; msgId: number | null }> {
+  const { registry, msgId } = await readRegistry(token);
+  const shares = (registry as Record<string, unknown>).__shares as ShareRegistry | undefined;
+  return { shares: shares ?? {}, registry, msgId };
+}
+
+async function findOrCreateSharedTopic(token: string): Promise<number> {
+  const { registry, msgId } = await readRegistry(token);
+  const key = "__shared_topic";
+  const existing = (registry as Record<string, unknown>)[key] as number | undefined;
+  if (existing) return existing;
+
+  const res = await fetch(apiUrl("createForumTopic", token), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: CHANNEL_ID, name: "shared:public" }),
+  });
+  if (!res.ok) throw new Error("Failed to create shared topic");
+
+  const topicData = (await res.json()) as { result: { message_thread_id: number } };
+  const threadId = topicData.result.message_thread_id;
+  (registry as Record<string, unknown>)[key] = threadId;
+  await writeRegistry(registry, msgId, token);
+  return threadId;
+}
+
+export async function saveSharedData(
+  slug: string,
+  data: { type: "solve" | "chat"; title: string; payload: unknown },
+): Promise<void> {
+  const token = nextToken();
+  const threadId = await findOrCreateSharedTopic(token);
+
+  const json = JSON.stringify({ slug, ...data, sharedAt: new Date().toISOString() });
+  const blob = new Blob([json], { type: "application/json" });
+
+  const form = new FormData();
+  form.append("chat_id", CHANNEL_ID);
+  form.append("message_thread_id", threadId.toString());
+  form.append("document", blob, `${slug}.json`);
+
+  const uploadRes = await fetch(apiUrl("sendDocument", token), { method: "POST", body: form });
+  if (!uploadRes.ok) throw new Error("Failed to upload shared data");
+
+  const uploadData = (await uploadRes.json()) as {
+    result: { document?: { file_id: string } };
+  };
+  const fileId = uploadData.result.document?.file_id;
+  if (!fileId) throw new Error("No file_id returned from Telegram upload");
+
+  // Store slug → fileId in registry under __shares
+  const { registry, msgId } = await readRegistry(token);
+  const shares = ((registry as Record<string, unknown>).__shares ?? {}) as ShareRegistry;
+  shares[slug] = fileId;
+  (registry as Record<string, unknown>).__shares = shares;
+  await writeRegistry(registry, msgId, token);
+}
+
+export async function loadSharedData(slug: string): Promise<Record<string, unknown> | null> {
+  const token = nextToken();
+  const { shares } = await readShareRegistry(token);
+  const fileId = shares[slug];
+  if (!fileId) return null;
+
+  const json = await downloadFile(fileId, token);
+  try {
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}

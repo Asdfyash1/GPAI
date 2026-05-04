@@ -667,7 +667,7 @@ function SolverResult({
                 <button className="icon-button" type="button" aria-label="Download">
                   <Download size={16} />
                 </button>
-                <ShareButton id={result.id} title={result.title} />
+                <ShareButton id={result.id} title={result.title} result={result} />
                 <button
                   className="regenerate-btn"
                   type="button"
@@ -976,37 +976,58 @@ const THINKING_STEPS = [
   "Cross-checking the answer…",
 ];
 
-function ShareButton({ id, title }: { id: string; title?: string }) {
-  const [copied, setCopied] = useState(false);
+function ShareButton({ id, title, result }: { id: string; title?: string; result?: EducationResponse }) {
+  const [status, setStatus] = useState<"idle" | "sharing" | "copied">("idle");
   const handleClick = async () => {
     if (typeof window === "undefined") return;
-    const url = `${window.location.origin}${window.location.pathname}?taskId=${encodeURIComponent(id)}`;
+    setStatus("sharing");
     try {
+      // Try server-side share (for logged-in users)
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "solve",
+          title: title ?? "Forge solve",
+          payload: result ?? { id },
+        }),
+      });
+      let shareUrl: string;
+      if (res.ok) {
+        const data = (await res.json()) as { url: string };
+        shareUrl = `${window.location.origin}${data.url}`;
+      } else {
+        // Fallback to taskId link for unauthenticated users
+        shareUrl = `${window.location.origin}/app?taskId=${encodeURIComponent(id)}`;
+      }
       if (navigator.share) {
         await navigator
-          .share({ title: title ?? "Forge solve", url })
-          .catch(() => {
-            /* user cancelled — fall through to clipboard */
-          });
+          .share({ title: title ?? "Forge solve", url: shareUrl })
+          .catch(() => { /* user cancelled */ });
       }
       if (navigator.clipboard) {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(shareUrl);
       }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      setStatus("copied");
+      setTimeout(() => setStatus("idle"), 1600);
     } catch {
-      /* ignore */
+      // Fallback — copy taskId link
+      const fallback = `${window.location.origin}/app?taskId=${encodeURIComponent(id)}`;
+      try { await navigator.clipboard.writeText(fallback); } catch { /* ignore */ }
+      setStatus("copied");
+      setTimeout(() => setStatus("idle"), 1600);
     }
   };
   return (
     <button
       className="icon-button"
       type="button"
-      aria-label={copied ? "Link copied" : "Copy share link"}
-      title={copied ? "Link copied" : "Copy share link"}
+      aria-label={status === "copied" ? "Link copied" : "Copy share link"}
+      title={status === "copied" ? "Link copied" : "Copy share link"}
       onClick={handleClick}
+      disabled={status === "sharing"}
     >
-      {copied ? <Check size={16} /> : <LinkIcon size={16} />}
+      {status === "copied" ? <Check size={16} /> : <LinkIcon size={16} />}
     </button>
   );
 }

@@ -52,7 +52,10 @@ export function EducationApp() {
   // Sentinel surfaced via aria-live for non-modal users ("Saved" /
   // "Saving…" / "Couldn't sync"). We only render it when a user is
   // signed in so logged-out users don't see noise.
-  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  // Sync status tracked internally — intentionally NOT surfaced in the
+  // UI so users never see Telegram storage details. The setter is still
+  // called by useSync, logout, and migration handlers.
+  const [, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [modelChoice, setModelChoice] = useState<ModelChoice>("auto");
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
   const [solverPrompt, setSolverPrompt] = useState("");
@@ -71,6 +74,13 @@ export function EducationApp() {
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
+  // Mirrors `history` so async callbacks (hydrateFromCloud) that run
+  // long after mount always see the current array length, not the
+  // stale [] captured in the mount-time closure.
+  const historyRef = useRef<SidebarItem[]>([]);
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
   const [visualizerSeed, setVisualizerSeed] = useState<string>("");
   // Persist-after-hydrate guard: until the initial localStorage load runs
   // we MUST NOT write empty state back to disk, otherwise reloading the
@@ -114,7 +124,10 @@ export function EducationApp() {
       }
       hydrated.current = true;
       if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
-      if (nextHistory) setHistory(nextHistory);
+      if (nextHistory) {
+        historyRef.current = nextHistory;
+        setHistory(nextHistory);
+      }
       if (nextStore) setResponseStore(nextStore);
       if (nextChats) setChatSessions(nextChats);
 
@@ -191,7 +204,12 @@ export function EducationApp() {
           return;
         }
         // Cloud empty: do we have local data worth importing?
-        const localCount = history.length;
+        // Read from the ref — NOT the `history` state var — because
+        // this function may execute from a stale mount-time closure
+        // where `history` is still the initial `[]`. The ref is kept
+        // in sync via a useEffect so it always reflects the latest
+        // localStorage-hydrated value.
+        const localCount = historyRef.current.length;
         if (allowMigrationPrompt && localCount > 0) {
           setMigrationOpen(true);
           // Stay un-ready so auto-save doesn't fire until the user picks.
@@ -243,11 +261,6 @@ export function EducationApp() {
     return () => {
       cancelled = true;
     };
-    // hydrateFromCloud is intentionally not in deps — a new closure
-    // every render would re-trigger this on every state change and
-    // re-fetch /api/auth/me unnecessarily. The mount-time call is the
-    // only one we want.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Lock background scroll while the off-canvas drawer is open so the
@@ -322,6 +335,22 @@ export function EducationApp() {
     snapshot: cloudSnapshot,
     onStatusChange: (next) => setSyncStatus(next),
   });
+
+  // Flush unsaved state to the server when the tab is closing so the
+  // last few seconds of edits (inside the 5s debounce window) aren't
+  // lost. `navigator.sendBeacon` fires a non-blocking POST that
+  // survives page unload — ideal for this "best-effort last save".
+  const snapshotRef = useRef(cloudSnapshot);
+  useEffect(() => { snapshotRef.current = cloudSnapshot; }, [cloudSnapshot]);
+  useEffect(() => {
+    if (!user || !syncReady) return;
+    const flush = () => {
+      const payload = JSON.stringify({ data: snapshotRef.current });
+      navigator.sendBeacon("/api/sync/save", new Blob([payload], { type: "application/json" }));
+    };
+    window.addEventListener("beforeunload", flush);
+    return () => window.removeEventListener("beforeunload", flush);
+  }, [user, syncReady]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !hydrated.current) return;
@@ -510,7 +539,7 @@ export function EducationApp() {
         onRename={handleRenameItem}
         onNewTask={handleNewTask}
         onOpenSettings={() => setSettingsOpen(true)}
-        userLabel="hiyash04+asd1"
+        userLabel={user?.email ?? "Guest"}
       />
       {mobileSidebarOpen && (
         <button
@@ -715,11 +744,6 @@ export function EducationApp() {
           setSyncReady(true);
         }}
       />
-      {user && syncStatus === "error" && (
-        <div className="sync-status sync-status-error" role="status" aria-live="polite">
-          Couldn&rsquo;t sync to your account. We&rsquo;ll retry on your next change.
-        </div>
-      )}
     </div>
   );
 }
