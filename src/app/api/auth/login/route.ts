@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     const storedHash = (userData as Record<string, unknown>).passwordHash;
     if (!storedHash || typeof storedHash !== "string") {
-      return Response.json({ error: "Account was created with OTP. Please sign up again with a password." }, { status: 401 });
+      return Response.json({ error: "No password set. Please use Sign Up to set a password." }, { status: 401 });
     }
 
     const valid = await verifyPassword(password, storedHash);

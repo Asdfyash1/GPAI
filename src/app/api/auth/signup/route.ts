@@ -24,20 +24,25 @@ export async function POST(request: Request) {
     }
 
     await findOrCreateUserTopic(emailHash);
-
     const passwordHash = await hashPassword(password);
 
-    await saveUserData(emailHash, {
-      profile: { email, createdAt: new Date().toISOString() },
-      passwordHash,
-      chats: [],
-      settings: {},
-    });
+    if (existing) {
+      // Account exists but has no passwordHash (sync overwrote it or old OTP account).
+      // Preserve existing data and add the password.
+      await saveUserData(emailHash, { ...existing, passwordHash });
+    } else {
+      await saveUserData(emailHash, {
+        profile: { email, createdAt: new Date().toISOString() },
+        passwordHash,
+        chats: [],
+        settings: {},
+      });
+    }
 
     const token = await createToken({ email, emailHash });
 
     return new Response(
-      JSON.stringify({ ok: true, email, emailHash, isNew: true }),
+      JSON.stringify({ ok: true, email, emailHash, isNew: !existing }),
       {
         status: 200,
         headers: {
