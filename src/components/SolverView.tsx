@@ -34,6 +34,7 @@ import { MathMarkdown } from "@/components/MathMarkdown";
 import { ModelAvatars, modelDisplay } from "@/components/ModelAvatars";
 import { useStream } from "@/hooks/useStream";
 import { usePersonalization } from "@/hooks/usePersonalization";
+import { useSpacedRepetition } from "@/hooks/useSpacedRepetition";
 import type { GlossaryEntry } from "@/types/education";
 
 type SolverViewProps = {
@@ -462,6 +463,7 @@ function SolverResult({
 }) {
   const [tab, setTab] = useState<"followups" | "quiz">("followups");
   const [chatInput, setChatInput] = useState("");
+  const sr = useSpacedRepetition();
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
   const [quizFormat, setQuizFormat] = useState<"mixed" | "mcq" | "short">(
@@ -787,7 +789,25 @@ function SolverResult({
         )}
 
         {result?.quiz && result.quiz.length > 0 && (
-          <QuizSection items={result.quiz} />
+          <QuizSection items={result.quiz} onSaveForReview={sr.addCard} />
+        )}
+
+        {sr.dueCards.length > 0 && (
+          <section className="result-section">
+            <h2 className="section-heading">Review queue ({sr.dueCards.length} due)</h2>
+            <ul className="review-queue">
+              {sr.dueCards.slice(0, 5).map((c) => (
+                <li key={c.id} className="review-card">
+                  <div className="review-question"><MathMarkdown content={c.question} /></div>
+                  <div className="review-actions">
+                    <button type="button" className="quiz-retry" onClick={() => sr.reviewCard(c.id, 1)}>Forgot</button>
+                    <button type="button" className="quiz-retry" onClick={() => sr.reviewCard(c.id, 3)}>Hard</button>
+                    <button type="button" className="quiz-retry" onClick={() => sr.reviewCard(c.id, 5)}>Easy</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </div>
 
@@ -1151,7 +1171,7 @@ function ThinkingProcess() {
  * and a numeric counter. Resets the visible index back to 0 when the
  * underlying item set shrinks (e.g. user regenerates a smaller batch).
  */
-function QuizSection({ items }: { items: PracticeItem[] }) {
+function QuizSection({ items, onSaveForReview }: { items: PracticeItem[]; onSaveForReview?: (q: string, a: string) => void }) {
   const [index, setIndex] = useState(0);
   // Clamp index when items change beneath us (e.g. shorter regen).
   const safeIndex = Math.min(index, items.length - 1);
@@ -1162,6 +1182,15 @@ function QuizSection({ items }: { items: PracticeItem[] }) {
     <section className="result-section">
       <header className="quiz-section-head">
         <h2 className="section-heading">Quick quiz</h2>
+        {onSaveForReview && (
+          <button
+            type="button"
+            className="quiz-retry"
+            onClick={() => items.forEach((it) => onSaveForReview(it.question, it.answer))}
+          >
+            Save all for review
+          </button>
+        )}
         <div className="quiz-pager" role="group" aria-label="Quiz pagination">
           <button
             type="button"

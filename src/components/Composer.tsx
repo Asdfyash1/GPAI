@@ -6,11 +6,13 @@ import {
   Loader2,
   Mic,
   Paperclip,
+  PenTool,
   Sparkles,
   Square,
   Video,
   X,
 } from "lucide-react";
+import { HandwritingCanvas } from "@/components/HandwritingCanvas";
 import {
   type ChangeEvent,
   type DragEvent,
@@ -136,6 +138,9 @@ export function Composer(props: ComposerProps) {
   const [pickError, setPickError] = useState<string | null>(null);
   const [ytFetching, setYtFetching] = useState(false);
   const [urlFetching, setUrlFetching] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [handwritingOpen, setHandwritingOpen] = useState(false);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const ytFetchedRef = useRef<Set<string>>(new Set());
   const urlFetchedRef = useRef<Set<string>>(new Set());
   const currentModel = modelOptions.find((m) => m.id === props.modelChoice);
@@ -362,6 +367,38 @@ export function Composer(props: ComposerProps) {
     if (dt?.files && dt.files.length > 0) onPickFiles(dt.files);
   };
 
+  const toggleVoice = useCallback(() => {
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListening(false);
+      return;
+    }
+    const SpeechRecognition =
+      (window as unknown as Record<string, unknown>).SpeechRecognition ||
+      (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setPickError("Speech recognition not supported in this browser.");
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognition = new (SpeechRecognition as any)();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onresult = (event: { results: { transcript: string }[][] }) => {
+      const transcript = event.results[0]?.[0]?.transcript;
+      if (transcript) {
+        props.onChange(props.value ? `${props.value} ${transcript}` : transcript);
+      }
+      setListening(false);
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }, [listening, props]);
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Enter") return;
     if (props.enterToSend && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
@@ -506,8 +543,23 @@ export function Composer(props: ComposerProps) {
             </button>
           )}
           {props.ratioControl}
-          <button type="button" className="icon-button" title="Voice (coming soon)" disabled>
+          <button
+            type="button"
+            className={`icon-button ${listening ? "is-active" : ""}`}
+            title={listening ? "Stop dictation" : "Voice input"}
+            aria-label={listening ? "Stop dictation" : "Voice input"}
+            onClick={toggleVoice}
+          >
             <Mic size={16} />
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            title="Handwriting input"
+            aria-label="Handwriting input"
+            onClick={() => setHandwritingOpen(true)}
+          >
+            <PenTool size={16} />
           </button>
         </div>
 
@@ -648,6 +700,23 @@ export function Composer(props: ComposerProps) {
       </div>
 
       {props.hint && <p className="composer-hint">{props.hint}</p>}
+
+      {handwritingOpen && (
+        <HandwritingCanvas
+          onSubmit={(dataUrl) => {
+            setHandwritingOpen(false);
+            const asset = {
+              name: "Handwriting",
+              type: "image/png",
+              size: dataUrl.length,
+              dataUrl,
+              preview: dataUrl,
+            };
+            props.onAttachmentsChange([...props.attachments, asset]);
+          }}
+          onClose={() => setHandwritingOpen(false)}
+        />
+      )}
     </div>
   );
 }

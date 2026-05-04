@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { History, Trash2 } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { History, RefreshCw, Trash2 } from "lucide-react";
 import {
   Bold,
   Download,
@@ -48,7 +48,7 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
   const stream = useStream();
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
 
-  const pushVersion = (label: string, body: string) => {
+  const pushVersion = useCallback((label: string, body: string) => {
     const id = `cs_${Date.now()}`;
     setHistory((h) =>
       [{ id, label, content: body, createdAt: new Date().toISOString() }, ...h].slice(
@@ -57,7 +57,7 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
       ),
     );
     setActiveVersionId(id);
-  };
+  }, []);
 
   const generate = (overridePrompt?: string) => {
     const final = (overridePrompt ?? prompt).trim();
@@ -79,6 +79,31 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
         onFinal: (text) => {
           setContent(text);
           pushVersion(final.slice(0, 60), text);
+        },
+      },
+    );
+  };
+
+  const regenerateSection = (sectionHeading: string) => {
+    if (!content || !prompt) return;
+    const instruction = `Regenerate ONLY the "${sectionHeading}" section of the cheatsheet below. Keep all other sections exactly as they are. Return the full cheatsheet with only that section refreshed.\n\nOriginal topic: ${prompt}\n\nCurrent cheatsheet markdown:\n\n${content}`;
+    setContent("");
+    stream.start(
+      "/api/educate/stream",
+      {
+        mode: "cheatsheet",
+        prompt: instruction,
+        style: "exam",
+        audience: "exam-ready",
+        attachments: [],
+        crossCheck: false,
+        modelChoice,
+      },
+      {
+        onChunk: (text) => setContent(text),
+        onFinal: (text) => {
+          setContent(text);
+          pushVersion(`Regen: ${sectionHeading}`, text);
         },
       },
     );
@@ -146,6 +171,11 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
       setTimeout(cleanup, 4000);
     });
   };
+
+  const sectionHeadings = useMemo(() => {
+    if (!content) return [];
+    return Array.from(content.matchAll(/^##\s+(.+)$/gm)).map((m) => m[1].trim());
+  }, [content]);
 
   const empty = !content && !stream.isStreaming;
 
@@ -319,6 +349,22 @@ export function CheatsheetView({ modelChoice, setModelChoice }: CheatsheetViewPr
             </button>
           </div>
         </div>
+        {sectionHeadings.length > 0 && !stream.isStreaming && (
+          <div className="cheatsheet-sections">
+            {sectionHeadings.map((h) => (
+              <button
+                key={h}
+                type="button"
+                className="section-regen-btn"
+                onClick={() => regenerateSection(h)}
+                title={`Regenerate "${h}"`}
+              >
+                <RefreshCw size={12} />
+                {h}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="cheatsheet-canvas-wrap" style={{ ["--zoom" as string]: zoom / 100 }}>
           <article
             className="cheatsheet-page"

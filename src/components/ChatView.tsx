@@ -9,8 +9,11 @@ import type {
 } from "@/types/education";
 import { Composer } from "@/components/Composer";
 import { MathMarkdown } from "@/components/MathMarkdown";
+import { MermaidBlock } from "@/components/MermaidBlock";
 import { useStream } from "@/hooks/useStream";
 import { usePersonalization } from "@/hooks/usePersonalization";
+
+const MERMAID_RE = /```mermaid\s*([\s\S]*?)```/;
 
 type SourceItem = {
   title: string;
@@ -479,10 +482,20 @@ function AssistantBlock({
   streaming?: boolean;
 }) {
   const { content: visibleContent, sources } = extractSources(content);
+  const mermaidMatch = !streaming ? visibleContent.match(MERMAID_RE) : null;
+  const mermaidCode = mermaidMatch ? mermaidMatch[1].trim() : null;
+  const textWithoutMermaid = mermaidCode
+    ? visibleContent.replace(MERMAID_RE, "").trim()
+    : visibleContent;
   return (
     <div className="chat-row chat-row-assistant">
       <div className="assistant-content">
-        <MathMarkdown content={visibleContent} />
+        <MathMarkdown content={textWithoutMermaid} />
+        {mermaidCode && (
+          <div className="chat-diagram">
+            <MermaidBlock code={mermaidCode} />
+          </div>
+        )}
         {streaming && <span className="streaming-cursor" aria-hidden />}
         {!streaming && <SourcesPills sources={sources} />}
       </div>

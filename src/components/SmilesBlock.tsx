@@ -15,21 +15,26 @@ export function SmilesBlock({ smiles, theme = "dark" }: SmilesBlockProps) {
     let cancelled = false;
 
     (async () => {
-      const SmilesDrawer = (await import("smiles-drawer")).default;
-      if (cancelled) return;
-      const drawer = new SmilesDrawer.SvgDrawer({
-        width: 500,
-        height: 350,
-        bondThickness: 1.5,
-        fontSizeLarge: 11,
-        fontSizeSmall: 8,
-        padding: 30,
-      });
-      SmilesDrawer.parse(smiles, (tree: unknown) => {
-        if (!cancelled && svgRef.current) {
-          drawer.draw(tree, svgRef.current, theme);
-        }
-      });
+      try {
+        const mod = await (Function('return import("smiles-drawer")')() as Promise<{ default: { SvgDrawer: new (opts: Record<string, unknown>) => { draw: (tree: unknown, el: SVGSVGElement, t: string) => void }; parse: (s: string, cb: (tree: unknown) => void) => void } }>);
+        if (cancelled) return;
+        const SmilesDrawer = mod.default;
+        const drawer = new SmilesDrawer.SvgDrawer({
+          width: 500,
+          height: 350,
+          bondThickness: 1.5,
+          fontSizeLarge: 11,
+          fontSizeSmall: 8,
+          padding: 30,
+        });
+        SmilesDrawer.parse(smiles, (tree: unknown) => {
+          if (!cancelled && svgRef.current) {
+            drawer.draw(tree, svgRef.current, theme);
+          }
+        });
+      } catch {
+        // smiles-drawer not available
+      }
     })();
 
     return () => { cancelled = true; };
