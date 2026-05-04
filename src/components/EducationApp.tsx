@@ -25,7 +25,7 @@ import { AuthModal, type AuthedUser } from "@/components/AuthModal";
 import { MigrationPrompt } from "@/components/MigrationPrompt";
 import { useSync } from "@/hooks/useSync";
 import { useTelemetry } from "@/hooks/useTelemetry";
-import { buildSnapshot, isEmptySnapshot, parseSnapshot, type SyncSnapshot } from "@/lib/sync";
+import { buildSnapshot, parseSnapshot, type SyncSnapshot } from "@/lib/sync";
 
 type Theme = "dark" | "light";
 
@@ -190,13 +190,19 @@ export function EducationApp() {
         }
         const json = (await res.json()) as { data?: unknown };
         const remote = parseSnapshot(json.data);
-        if (!isEmptySnapshot(remote)) {
+        const hasCloudData = remote && (
+          remote.history.length > 0 ||
+          Object.keys(remote.responses).length > 0 ||
+          Object.keys(remote.chats).length > 0
+        );
+        if (hasCloudData) {
           // Cloud canonical — replace local working set.
-          setHistory(remote!.history);
-          setResponseStore(remote!.responses);
-          setChatSessions(remote!.chats);
-          if (remote!.settings.theme === "dark" || remote!.settings.theme === "light") {
-            setTheme(remote!.settings.theme);
+          setHistory(remote.history);
+          historyRef.current = remote.history;
+          setResponseStore(remote.responses);
+          setChatSessions(remote.chats);
+          if (remote.settings.theme === "dark" || remote.settings.theme === "light") {
+            setTheme(remote.settings.theme);
           }
           setActiveItem(undefined);
           setSolverResult(null);
