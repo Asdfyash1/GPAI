@@ -206,6 +206,7 @@ export type VisualizeResponse = {
   description: string;
   variants: string[];
   qualityChecks: string[];
+  smilesData?: string[];
   verification: VerificationSignal[];
   createdAt: string;
 };

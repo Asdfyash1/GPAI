@@ -11,6 +11,7 @@ import type {
 } from "@/types/education";
 import { Composer } from "@/components/Composer";
 import { MermaidBlock } from "@/components/MermaidBlock";
+import { SmilesBlock } from "@/components/SmilesBlock";
 
 type VisualizerViewProps = {
   modelChoice: ModelChoice;
@@ -161,6 +162,13 @@ export function VisualizerView({
         {result && !result.imageDataUrl && !result.diagramSpec && (
           <div className="visualizer-fallback">
             <p>{result.description}</p>
+          </div>
+        )}
+        {result?.smilesData && result.smilesData.length > 0 && (
+          <div className="smiles-grid">
+            {result.smilesData.map((s) => (
+              <SmilesBlock key={s} smiles={s} />
+            ))}
           </div>
         )}
       </main>

@@ -90,12 +90,12 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 - [x] **Quota fallback to demo mode in chat.** When the primary NVIDIA call fails before sending a single chunk (e.g. 429 rate limit, upstream 5xx), the chat route silently retries with `modelChoice: "demo"` and emits a one-line "live model unavailable, falling back to a local demo answer" notice. _File:_ `src/app/api/chat/route.ts`.
 - [x] **Shareable task URL.** Solves now share a canonical link `?taskId=<id>`. The `<ShareButton>` next to the solve title copies the link to clipboard (uses `navigator.share` when available) and on next page load `EducationApp` reads `?taskId` from `URLSearchParams` and opens the matching solve / chat from localStorage. _Caveat:_ same-device only — server-side cross-device sharing still requires a backing store (see open work below). _Files:_ `src/components/SolverView.tsx` (`ShareButton`), `src/components/EducationApp.tsx`.
 - [x] **Quiz tab generates real questions in-place, doesn't replace the view.** New `POST /api/quiz` endpoint solves a strict-JSON quiz off the original problem + reference solution, and the Quiz rail now appends the parsed questions into `result.quiz` (so they render in the existing "Quick quiz" section beneath the solution) instead of re-issuing a follow-up that wipes the solver. Loading state, error message, and "+ Add 5 more questions" CTA included. _Files:_ `src/app/api/quiz/route.ts`, `src/components/SolverView.tsx`.
-- [ ] **Cross-device shareable URL.** The `?taskId=` link only works on the same device. Add an opt-in publish endpoint (POST a solve to a server-side store, get back a short `/s/<slug>` URL) so users can paste a link in another browser / phone.
+- [x] **Cross-device shareable URL.** POST `/api/share` saves to cloud, returns slug. `/s/[slug]` renders read-only. Shipped in PR #65.
 - [x] **In-context follow-up composer wired to the original problem.** Right-rail chips and "Ask about this problem" input now stream a follow-up answer into a Q&A timeline below them via `/api/chat`, instead of wiping the whole solver view by re-issuing the educate stream. A system primer feeds the model the original problem + the reference solution + the prior follow-ups so answers stay grounded. _Files:_ `src/components/SolverView.tsx` (`sendFollowUp`, thread state, JSX), `src/app/globals.css` (`.followup-thread`, `.followup-turn`, `.followup-q`, `.followup-a`, `.followup-pending`).
 - [x] **Quiz: MCQ format with 4 options + reveal-per-question.** `/api/quiz` now accepts a `format` field (`"mcq"`, `"short"`, `"mixed"` — default mixed). The system prompt instructs the model to return a `choices: string[]` field per item when MCQ is required, with `answer` matching one of the choices verbatim. The route validates each MCQ item (drops `choices` if `< 3 options` or `answer` not in `choices`, falling back gracefully to short-answer rendering). `<QuizItem>` renders MCQ items as 4 radio-style buttons (A/B/C/D); on click, it locks the row and highlights the correct option green and the user's wrong pick red, plus a "Try again" button to reset. The right rail has a Format selector (Mixed / Multiple choice only / Short answer only). _Files:_ `src/types/education.ts`, `src/app/api/quiz/route.ts`, `src/components/SolverView.tsx` (`QuizItem`, rail UI), `src/app/globals.css` (`.quiz-choice*`, `.quiz-feedback*`).
 - [x] **Visualizer: render-quality fixes for Mermaid diagrams + view-source / copy / SVG download.** Tightened the visualize spec system prompt with strict syntax rules ("ALWAYS quote node labels containing parentheses, colons, slashes; only ASCII identifiers; 5-12 nodes; no markdown inside the diagram block") so the LLM's Mermaid output is render-safe more often. Added a server-side `sanitizeMermaid()` pass that auto-quotes `[label (foo)]` / `((label: bar))` / `{label/baz}` so common LLM mis-quoting still renders. New `<DiagramView>` component shows a small toolbar with View Source toggle, Copy Mermaid source, and Download as SVG (serialised from the rendered DOM via `XMLSerializer`). _Files:_ `src/app/api/visualize/route.ts` (`specSystem`, `sanitizeMermaid`), `src/components/VisualizerView.tsx` (`DiagramView`), `src/app/globals.css` (`.diagram-toolbar`, `.diagram-source`).
 - [x] **Visualizer: text-to-image fallback when LLM returns no diagram.** `/api/visualize` now does a stricter "ONLY a mermaid block" retry when the first spec call comes back without a parseable Mermaid block. If even the retry can't produce one and the user picked a non-illustration category, the route automatically runs the Flux illustration pipeline so the canvas always shows *some* visual instead of dropping to the prose-only `.visualizer-fallback`. Verification trail records whether the image came from the explicit illustration path or the diagram-fallback path. _Files:_ `src/app/api/visualize/route.ts`.
-- [ ] **Visualizer: chemistry / SMILES rendering.** Today chemistry category goes to the illustration path (Flux) only. Add SMILES → SVG via a small client-side library (e.g. SmilesDrawer) so a chem prompt can produce a real molecule diagram.
+- [x] **Visualizer: chemistry / SMILES rendering.** SmilesDrawer v2.3.0 client-side rendering from fenced `smiles` code blocks. Extracts SMILES strings from LLM output and renders SVG molecule diagrams.
 - [x] **Cheatsheet: A4-printable density.** The Cheatsheet "Print / PDF" button used to open a popup window, write injected HTML, and fight ad-blockers. Replaced with `window.print()` plus a real `@media print` stylesheet that flips a `body[data-printing="cheatsheet"]` marker, hides every element except the `.cheatsheet-page` article, reflows it to A4 (`@page size: A4; margin: 12mm`) with `columns: 2; column-gap: 14mm; font-size: 9pt`. The `afterprint` event clears the marker so the live UI snaps back. Prompt was already tuned (`cheatsheetSystemPrompt` in `src/lib/prompts.ts`); UI gap is closed. _Files:_ `src/components/CheatsheetView.tsx` (`handlePrint`), `src/app/globals.css` (`@media print`).
 - [x] **Report Writer / PDF Notes / Notebook: structured exports.** All three views' Print/PDF buttons used to spawn a popup window, write injected HTML, and re-link KaTeX from a CDN — same anti-pattern PR #11 already fixed for the Cheatsheet. Replaced with `window.print()` + a `body[data-printing="document"]` marker and an `@media print` rule that hides everything except the `.document-page` article (Notebook reuses the same shell), reflows it to A4, forces `color: #111` and `background: transparent` on every descendant so the dark theme palette doesn't survive into the printed page, and wires `afterprint` cleanup. Print/PDF is also now disabled until the body has streamed in. _Files:_ `src/components/DocumentView.tsx`, `src/components/NotebookView.tsx`, `src/components/PdfNotesView.tsx`, `src/app/globals.css` (`@media print` `body[data-printing="document"]`).
 - [x] **Light theme polish.** Mermaid diagrams now render with theme-appropriate colors (dark vs default). Settings overlay, KaTeX display blocks, and source pills all use CSS variables instead of hardcoded dark fallbacks. _PR pending._
@@ -106,7 +106,7 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 - [x] **Better empty states.** Sidebar already reads "No items yet — solve a problem to see it here." (done in PR #50). Visualizer / Cheatsheet / Report have their own hero sections with CTAs when no content is loaded.
 - [x] **Keyboard shortcuts.** `Ctrl/Cmd+K` cycles through modes (solver → chat → cheatsheet → …), `Ctrl/Cmd+/` toggles the settings modal. _PR #52._
 - [x] **Multimodal input.** Composer accepts attachments and `analyzeUploadedImages` now extracts text from images (NVIDIA vision), PDFs (unpdf), and text-like files (UTF-8 decode). Extracted text is injected into the prompt via the existing `attachmentSummary` block in `src/lib/prompts.ts`.
-- [ ] **YouTube / web URL ingestion.** gpai.app composer footer says "Add PDF, image (JPG, PNG), website and Youtube link". Today we accept files; add URL paste that fetches the page (and YouTube transcript via `youtubetranscript`-style endpoint) and injects as context.
+- [x] **YouTube / web URL ingestion.** Composer auto-detects pasted URLs, fetches page content via `/api/fetch-url` (strips HTML, returns up to 12k chars), injects as context. YouTube transcript ingestion was already implemented.
 - [x] **Streaming "Thinking…" steps.** Verified: the `ThinkingProcess` component is mounted only while `isStreaming && !result`, and its 1.1s `setInterval` correctly advances through all 5 steps. The timer-based approach is intentional (streaming tokens don't map to discrete steps). No code change needed.
 - [x] **Better error messages.** Solver error section now has a "Try again" retry button alongside "Back to composer". Chat errors detect 429 rate-limit and 5xx server errors and show friendly messages instead of raw error strings. _PR pending._
 - [x] **Quota fallback to demo mode.** Both `streamEducationalSolverDraft` and `streamChatResponse` now use `withQuotaFallback()` which catches 429/5xx errors mid-stream and yields a friendly "model temporarily unavailable" message instead of crashing. _PR pending._
@@ -119,19 +119,19 @@ Repo: `Asdfyash1/GPAI` · Active PR: [#8](https://github.com/Asdfyash1/GPAI/pull
 - [x] **Auth + storage via Telegram Bot API.** Email OTP signup/login + JWT sessions + Telegram channel storage. _PR #58._
 - ~~**Server-side history sync.**~~ Covered by Telegram storage plan below.
 - [x] **Model picker UX.** Composer shows a pill labelled "Auto" today; clicking it should open a model picker with cost/quality stats per model. _Added debate mode option + all existing models. PR #55._
-- [ ] **Telemetry.** Add anonymous usage events so we can see which modes get used.
+- [x] **Telemetry.** Anonymous usage events via `useTelemetry` hook + `/api/telemetry` endpoint. Tracks mode switches, feature adoption. Batched via `sendBeacon` every 2s.
 - [x] **Onboarding tour.** First-visit modal walking through Solver → Chat → Visualizer → Cheatsheet. _PR #55._
 - [x] **Light-mode cheatsheet print test.** Print CSS already forces `color: #111` and `background: transparent` on all descendants under `body[data-printing="cheatsheet"]`, so both light and dark themes produce identical A4 output. No additional change needed.
-- [ ] **A11y pass.** Tab order, aria-labels, focus rings — none have been audited.
-- [ ] **i18n.** UI is English-only.
+- [x] **A11y pass.** Global `focus-visible` outline, skip-to-content link, `role="application"` + `aria-label` on app shell, `role="navigation"` on sidebar, `role="tablist"` on mode tabs.
+- [x] **i18n.** Infrastructure: `src/i18n/en.ts` (English translations), `src/i18n/index.ts` (translation system with `t(key)` function), `useTranslation` hook. Ready for additional languages.
 
 ## Tooling / DevOps
 
 - [x] `next.config.ts` `allowedDevOrigins` — done above.
 - [ ] **Vercel preview previews failing on PRs.** CI shows 1 failed Vercel deployment with: _"No GitHub account was found matching the commit author email address."_ The fix is to use a commit author email tied to a GitHub account (e.g. `Asdfyash1@users.noreply.github.com`). Owner of the repo needs to either set that as the commit-email or remove the gate in Vercel settings.
-- [ ] **CI: add `npm run lint` + `npm run build` jobs.** Today only Vercel preview runs. Add a GitHub Action so PRs are gated on lint+build green.
-- [ ] **Pre-commit hooks.** No `.pre-commit-config.yaml` today; consider adding `eslint --fix` + `prettier --check` on staged files.
-- [ ] **Snapshot tests.** No tests at all today. Even one Playwright smoke test that boots the app and asserts the four mode tabs are clickable would catch the kind of regression we just had.
+- [x] **CI: add `npm run lint` + `npm run build` jobs.** `.github/workflows/ci.yml` runs on PR + push to main: checkout → Node 18 → `npm ci` → `npm run lint` → `npm run build`.
+- [x] **Pre-commit hooks.** Husky + lint-staged: `.husky/pre-commit` runs `npx lint-staged` → `eslint --fix` on staged `.ts/.tsx` files.
+- [x] **Playwright smoke tests.** `tests/smoke.spec.ts` with two tests: landing page loads + has CTA, login page loads + has email input. `playwright.config.ts` configured with webServer on port 3000.
 
 ## Notes for future sessions
 
@@ -261,15 +261,15 @@ These are gpai.app gaps and outperform-opportunities that haven't been scoped in
 - **Light theme polish.** There's a topbar theme toggle but several views were styled for dark only. Audit `solver-view`, `chat`, `cheatsheet-page`, `notebook-page`, `visualizer-canvas` against `[data-theme="light"]` and ship token-only fixes.
 - **Visualizer: chemistry / SMILES rendering.** Today chemistry category routes to Flux only. Add SMILES → SVG via SmilesDrawer or RDKit-WASM so a SMILES string in the prompt produces a real molecule diagram alongside any illustration.
 - ~~**Solver: step-by-step reveal mode.**~~ [x] Done in PR #55 — "Show next step" button splits solution into numbered steps, reveals one at a time.
-- **Chat: image-output answers.** When the chat prompt is "show me a diagram of X" and Web Search is off, route through `/api/visualize` and inline the resulting image in the chat reply (similar to how Sources stack renders today).
-- **Cheatsheet: per-section regenerate.** Right now you regenerate the whole sheet. Let the user click any heading to refresh just that section without losing the rest.
+- ~~**Chat: image-output answers.**~~ Done — Mermaid code blocks in chat responses are auto-extracted and rendered inline via `<MermaidBlock>` in `AssistantBlock`.
+- ~~**Cheatsheet: per-section regenerate.**~~ Done — section headings extracted via regex, rendered as clickable buttons with RefreshCw icon. `regenerateSection()` rebuilds just that section via LLM.
 - **Mobile / responsive pass.** The right-rail collapses, but the composer + topbar haven't been audited at 360px. Add a responsive breakpoint sweep.
 - **Print backstop timeout (mobile).** `afterprint` doesn't always fire on mobile browsers, so `body[data-printing]` can stay set forever and `visibility: hidden` blanks the entire UI. Wrap every print handler (`CheatsheetView`, `DocumentView`, `NotebookView`, `PdfNotesView`) in a `setTimeout(cleanup, 4000)` backstop.
-- **Solver: voice-in / dictation.** Wire the existing mic icon to the Web Speech API.
-- **Solver: handwriting / inkboard input.** Free-draw a problem on a canvas, OCR via the existing vision pipeline, route to solver. gpai.app teases this.
-- **Notebook: nested folders.** Pages today are flat. Add a folder tree in the left rail (already a sidebar slot for it).
-- **Quiz: spaced-repetition review queue.** Persist quiz results, surface "due for review" cards on the home screen.
-- **Settings page.** Today there's no place to switch model defaults, manage saved chats in bulk, or see remaining quota. Add a real `/settings` route.
+- ~~**Solver: voice-in / dictation.**~~ Done — Web Speech API integration in Composer. Mic button toggles continuous dictation, appends transcript to prompt.
+- ~~**Solver: handwriting / inkboard input.**~~ Done — `HandwritingCanvas` component with mouse/touch drawing. Converts canvas to PNG data URL, adds as image attachment for vision OCR.
+- ~~**Notebook: nested folders.**~~ Done — `folder` property on pages, folder navigation with breadcrumb, create/move-to-folder UI, filtered page list.
+- ~~**Quiz: spaced-repetition review queue.**~~ Done — `useSpacedRepetition` hook with SM-2 algorithm. "Save all for review" button on quiz section. Review queue shows due cards with Forgot/Hard/Easy ratings.
+- ~~**Settings page.**~~ Done — `/settings` route with theme toggle, data management (clear history/chats), about section.
 
 ## Next-session priority order (read this first)
 
@@ -325,6 +325,25 @@ After each PR: run `npx tsc --noEmit && npm run lint && npm run build` (all thre
 - **PR #19 (PDF export, merged):** print backstop finding — captured as the second Critical bug above.
 
 ## Changelog (append-only — every session adds an entry)
+
+- **2026-05-03 — Devin (session a34fb2920c204f5795e0219e4c5d8bbe) — feat: complete backlog implementation (17 items):**
+  1. **SMILES chemistry rendering** — SmilesDrawer v2.3.0 client-side SVG rendering from fenced `smiles` code blocks in Visualizer.
+  2. **Web URL ingestion** — Composer auto-detects pasted URLs, fetches page content via `/api/fetch-url`, injects as context.
+  3. **Telemetry** — Anonymous usage events via `useTelemetry` hook + `/api/telemetry` endpoint, batched via `sendBeacon`.
+  4. **A11y pass** — Global `focus-visible` outline, skip-to-content link, ARIA roles on app shell and sidebar.
+  5. **CI: GitHub Action** — `.github/workflows/ci.yml` for lint + build on every PR.
+  6. **Pre-commit hooks** — Husky + lint-staged running `eslint --fix` on staged `.ts/.tsx` files.
+  7. **OG meta tags + SEO** — OpenGraph/Twitter meta in layout.tsx, `public/robots.txt`, `src/app/sitemap.ts`.
+  8. **System prompt safety** — Chat and solver prompts identify as Forge STEM tutor, refuse off-topic requests, redirect to education.
+  9. **i18n infrastructure** — English translations, `t(key)` function, `useTranslation` hook.
+  10. **Playwright smoke tests** — Landing page and login page tests in `tests/smoke.spec.ts`.
+  11. **Chat diagram rendering** — Auto-extract and render Mermaid code blocks inline in chat responses.
+  12. **Cheatsheet per-section regenerate** — Click section headings to regenerate individual sections.
+  13. **Solver voice-in** — Web Speech API dictation via mic button in Composer.
+  14. **Solver handwriting input** — `HandwritingCanvas` component with freehand drawing, converts to PNG for vision OCR.
+  15. **Notebook nested folders** — Folder property on pages, folder navigation with breadcrumb, create/move UI.
+  16. **Quiz spaced-repetition** — `useSpacedRepetition` hook with SM-2 algorithm, review queue with Forgot/Hard/Easy ratings.
+  17. **Settings page** — `/settings` route with theme toggle, data management, about section.
 
 - **2026-05-03 — Devin (session a34fb2920c204f5795e0219e4c5d8bbe) — feat: bug fix + login redesign + share URLs + silent sync + README rewrite:**
   1. **Bug fix — stale closure race condition in `hydrateFromCloud`:** `history` captured as `[]` in mount-time closure meant `localCount` was always 0 → migration prompt never fired → auto-save pushed stale localStorage data to cloud on new logins. Fix: added `historyRef` (mirrors existing `activeChatIdRef` pattern), synced via `useEffect`, eagerly updated in localStorage microtask. `hydrateFromCloud` now reads `historyRef.current.length`. Removed unused eslint-disable directive.

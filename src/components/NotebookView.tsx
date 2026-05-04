@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download, FilePlus2, Pencil, Printer, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronRight, Download, FilePlus2, Folder, FolderPlus, Pencil, Printer, Trash2 } from "lucide-react";
 import type { ModelChoice, UploadedAsset } from "@/types/education";
 import { Composer } from "@/components/Composer";
 import { MathMarkdown } from "@/components/MathMarkdown";
@@ -13,6 +13,7 @@ type NotebookPage = {
   prompt: string;
   content: string;
   createdAt: string;
+  folder?: string;
 };
 
 const NOTEBOOK_KEY = "eduforge:notebook";
@@ -27,7 +28,32 @@ export function NotebookView({ modelChoice, setModelChoice }: NotebookViewProps)
   const [activeId, setActiveId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<UploadedAsset[]>([]);
+  const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const stream = useStream();
+
+  const folders = useMemo(() => {
+    const set = new Set<string>();
+    pages.forEach((p) => { if (p.folder) set.add(p.folder); });
+    return Array.from(set).sort();
+  }, [pages]);
+
+  const filteredPages = useMemo(() => {
+    if (!activeFolder) return pages;
+    return pages.filter((p) => p.folder === activeFolder);
+  }, [pages, activeFolder]);
+
+  const createFolder = () => {
+    const name = window.prompt("Folder name");
+    if (!name?.trim()) return;
+    setActiveFolder(name.trim());
+  };
+
+  const moveToFolder = (pageId: string) => {
+    const folderName = window.prompt("Move to folder (leave empty for root)", activeFolder ?? "");
+    setPages((prev) =>
+      prev.map((p) => (p.id === pageId ? { ...p, folder: folderName?.trim() || undefined } : p)),
+    );
+  };
 
   // hydrate
   useEffect(() => {
@@ -69,6 +95,7 @@ export function NotebookView({ modelChoice, setModelChoice }: NotebookViewProps)
       prompt: final,
       content: "",
       createdAt: new Date().toISOString(),
+      folder: activeFolder ?? undefined,
     };
     setPages((prev) => [page, ...prev].slice(0, 50));
     setActiveId(id);
@@ -139,14 +166,49 @@ export function NotebookView({ modelChoice, setModelChoice }: NotebookViewProps)
   return (
     <div className="notebook-view">
       <aside className="notebook-side">
-        <button type="button" className="primary-button" onClick={handleNew}>
-          <FilePlus2 size={14} /> New page
-        </button>
+        <div className="notebook-side-actions">
+          <button type="button" className="primary-button" onClick={handleNew}>
+            <FilePlus2 size={14} /> New page
+          </button>
+          <button type="button" className="icon-button" onClick={createFolder} title="New folder" aria-label="New folder">
+            <FolderPlus size={14} />
+          </button>
+        </div>
+        {folders.length > 0 && (
+          <div className="notebook-folders">
+            <button
+              type="button"
+              className={`notebook-folder-btn ${!activeFolder ? "is-active" : ""}`}
+              onClick={() => setActiveFolder(null)}
+            >
+              All pages
+            </button>
+            {folders.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`notebook-folder-btn ${activeFolder === f ? "is-active" : ""}`}
+                onClick={() => setActiveFolder(f)}
+              >
+                <Folder size={12} /> {f}
+              </button>
+            ))}
+          </div>
+        )}
+        {activeFolder && (
+          <div className="notebook-breadcrumb">
+            <button type="button" className="notebook-breadcrumb-link" onClick={() => setActiveFolder(null)}>
+              All
+            </button>
+            <ChevronRight size={12} />
+            <span>{activeFolder}</span>
+          </div>
+        )}
         <ul className="notebook-pages">
-          {pages.length === 0 ? (
+          {filteredPages.length === 0 ? (
             <li className="notebook-empty">No pages yet</li>
           ) : (
-            pages.map((p) => (
+            filteredPages.map((p) => (
               <li
                 key={p.id}
                 className={`notebook-page-row ${
@@ -162,6 +224,14 @@ export function NotebookView({ modelChoice, setModelChoice }: NotebookViewProps)
                   {p.title}
                 </button>
                 <div className="notebook-row-actions">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Move to folder"
+                    onClick={() => moveToFolder(p.id)}
+                  >
+                    <Folder size={12} />
+                  </button>
                   <button
                     type="button"
                     className="icon-button"

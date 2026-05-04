@@ -115,6 +115,8 @@ export function Sidebar({
       className={`sidebar ${collapsed ? "is-collapsed" : ""} ${
         mobileOpen ? "is-mobile-open" : ""
       }`}
+      role="navigation"
+      aria-label="History and navigation"
     >
       <div className="sidebar-top">
         <div className="brand">

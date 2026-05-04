@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prepare": "husky"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.42",
@@ -22,6 +23,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "resend": "^6.12.2",
+    "smiles-drawer": "^2.3.0",
     "unpdf": "^1.6.2",
     "zod": "^4.3.6"
   },
@@ -31,7 +33,14 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "playwright": "^1.59.1",
     "typescript": "^5"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix"
+    ]
   }
 }
