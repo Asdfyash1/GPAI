@@ -596,9 +596,13 @@ export function EducationApp() {
                   className="icon-button"
                   onClick={async () => {
                     await fetch("/api/auth/logout", { method: "POST" });
+                    localStorage.removeItem("eduforge:history");
+                    localStorage.removeItem("eduforge:responses");
+                    localStorage.removeItem("eduforge:chats");
                     setUser(null);
                     setSyncReady(false);
                     setSyncStatus("idle");
+                    window.location.href = "/login";
                   }}
                   aria-label="Sign out"
                   title="Sign out"
@@ -691,11 +695,16 @@ export function EducationApp() {
         open={authOpen}
         onClose={() => setAuthOpen(false)}
         onAuth={(u: AuthedUser) => {
+          // Clear previous user's local data before hydrating from cloud
+          localStorage.removeItem("eduforge:history");
+          localStorage.removeItem("eduforge:responses");
+          localStorage.removeItem("eduforge:chats");
+          setHistory([]);
+          setResponseStore({});
+          setChatSessions({});
+          historyRef.current = [];
           setUser({ email: u.email, emailHash: u.emailHash });
-          // After login: pull the user's snapshot. The same call also
-          // raises the migration prompt if the cloud is empty and we
-          // already have local history.
-          void hydrateFromCloud({ allowMigrationPrompt: true });
+          void hydrateFromCloud({ allowMigrationPrompt: false });
         }}
       />
       <MigrationPrompt
