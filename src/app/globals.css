@@ -2720,6 +2720,37 @@ a {
   max-width: 400px;
 }
 
+.smiles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 920px;
+  margin-top: 16px;
+}
+.smiles-container {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.smiles-svg {
+  width: 100%;
+  height: 250px;
+  max-width: 400px;
+}
+.smiles-string {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--ink-muted);
+  word-break: break-all;
+  text-align: center;
+}
+
 .visualizer-diagram {
   background: var(--bg-elev);
   border: 1px solid var(--line);

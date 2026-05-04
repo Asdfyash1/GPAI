@@ -56,7 +56,10 @@ function specSystem(category: VisualizerCategory) {
   const mermaidBlock = wantMermaid
     ? `\n\n## Mermaid\n\`\`\`mermaid\n<a COMPLETE, RENDERABLE Mermaid diagram. Pick the right diagram type for the topic:\n- flowchart TD / flowchart LR for processes, pipelines, decision trees, ${category}\n- graph LR for relationships / set diagrams\n- sequenceDiagram for protocol / interaction\n- classDiagram for data model\n- stateDiagram-v2 for state machines\n\nSTRICT RULES so the diagram actually renders:\n- ALWAYS quote node labels that contain parentheses, colons, slashes, or punctuation: A["Step (1): apply Newton's 2nd law"]\n- Use only ASCII letters / digits / underscore in node IDs (A, B, step1, not "A.1" or "A-B")\n- Keep labels under 60 characters; abbreviate long phrases\n- Do NOT include backticks or markdown inside the diagram\n- Do NOT mix multiple top-level diagram declarations in one block\n- 5-12 nodes is a good size for a study aid\n>\n\`\`\``
     : "";
-  return `You are an AI visualization engine for STEM education. The user wants a ${category} visualization.\n\nReturn:\n## Description\n2-3 sentences plain-English summary of what the diagram should show.\n\n## Variants\n3 short bullet points of alternative approaches.\n\n## Quality checks\n3 short bullet points (accuracy, completeness, clarity).${mermaidBlock}\n\nKeep prose under 220 words. Use markdown.`;
+  const smilesBlock = category === "chemistry"
+    ? `\n\n## SMILES\nIf the topic involves specific molecules, provide their SMILES notation. List each molecule on its own line inside a fenced block:\n\`\`\`smiles\nCCO\nCC(=O)O\n\`\`\`\nOnly include valid SMILES strings. If the topic is a reaction pathway or concept without specific molecules, omit this section.`
+    : "";
+  return `You are an AI visualization engine for STEM education. The user wants a ${category} visualization.\n\nReturn:\n## Description\n2-3 sentences plain-English summary of what the diagram should show.\n\n## Variants\n3 short bullet points of alternative approaches.\n\n## Quality checks\n3 short bullet points (accuracy, completeness, clarity).${mermaidBlock}${smilesBlock}\n\nKeep prose under 220 words. Use markdown.`;
 }
 
 /**
@@ -84,6 +87,15 @@ function sanitizeMermaid(code: string): string {
     return `{"${cleaned}"}`;
   });
   return out;
+}
+
+function extractSmiles(md: string): string[] {
+  const m = /\u0060\u0060\u0060smiles\s*([\s\S]*?)\u0060\u0060\u0060/i.exec(md);
+  if (!m) return [];
+  return m[1]
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && /^[A-Za-z0-9@+\-\[\]()\\/#=%.$:*~]/.test(l));
 }
 
 function extractMermaid(md: string): string | undefined {
@@ -120,6 +132,7 @@ export async function POST(request: Request) {
   let variants: string[] = [];
   let qualityChecks: string[] = [];
   let diagramSpec: string | undefined;
+  let smilesData: string[] = [];
 
   if (providers.length > 0) {
     try {
@@ -141,6 +154,9 @@ export async function POST(request: Request) {
       qualityChecks = matchBullets(matchSection(md, "Quality checks"));
       const rawMermaid = extractMermaid(md);
       diagramSpec = rawMermaid ? sanitizeMermaid(rawMermaid) : undefined;
+      if (category === "chemistry") {
+        smilesData = extractSmiles(md);
+      }
 
       // If the model omitted the mermaid block (or it was empty) and we
       // were expecting one, do exactly one stricter retry that asks for
@@ -226,6 +242,7 @@ export async function POST(request: Request) {
     ratio,
     imageDataUrl,
     diagramSpec,
+    smilesData: smilesData.length > 0 ? smilesData : undefined,
     description: description || `Visualization plan for: ${body.prompt}`,
     variants:
       variants.length > 0
