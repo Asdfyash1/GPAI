@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogIn, LogOut, Menu, Moon, Sun, User } from "lucide-react";
 import type {
   ChatMessage,
@@ -24,6 +24,7 @@ import { OnboardingTour } from "@/components/OnboardingTour";
 import { AuthModal, type AuthedUser } from "@/components/AuthModal";
 import { MigrationPrompt } from "@/components/MigrationPrompt";
 import { useSync } from "@/hooks/useSync";
+import { useTelemetry } from "@/hooks/useTelemetry";
 import { buildSnapshot, isEmptySnapshot, parseSnapshot, type SyncSnapshot } from "@/lib/sync";
 
 type Theme = "dark" | "light";
@@ -34,7 +35,9 @@ const STORE_KEY = "eduforge:responses";
 const CHAT_STORE_KEY = "eduforge:chats";
 
 export function EducationApp() {
-  const [mode, setMode] = useState<FeatureMode>("solver");
+  const [mode, setModeRaw] = useState<FeatureMode>("solver");
+  const { track } = useTelemetry();
+  const setMode = useCallback((m: FeatureMode) => { setModeRaw(m); track("mode_switch", { mode: m }); }, [track]);
   const [theme, setTheme] = useState<Theme>("dark");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Mobile (<= 720px) drawer state — separate from the desktop
@@ -148,7 +151,7 @@ export function EducationApp() {
         }
       }
     });
-  }, []);
+  }, [setMode]);
 
   // Pull the user's saved snapshot from Telegram and decide whether to
   // overwrite local state, prompt for migration, or quietly enable
@@ -302,9 +305,10 @@ export function EducationApp() {
       if (e.ctrlKey || e.metaKey) {
         if (e.key === "k") {
           e.preventDefault();
-          setMode((cur) => {
-            const idx = MODES.indexOf(cur);
-            return MODES[(idx + 1) % MODES.length];
+          setModeRaw((cur) => {
+            const next = MODES[(MODES.indexOf(cur) + 1) % MODES.length];
+            track("mode_switch", { mode: next });
+            return next;
           });
         } else if (e.key === "/") {
           e.preventDefault();
@@ -314,7 +318,7 @@ export function EducationApp() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [track]);
 
   // Build the cloud snapshot from current state. Memoised on shape so
   // that scrolling / hover / mode-tab clicks don't churn the value
