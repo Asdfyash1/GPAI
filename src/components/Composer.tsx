@@ -135,7 +135,9 @@ export function Composer(props: ComposerProps) {
   const [parsingCount, setParsingCount] = useState(0);
   const [pickError, setPickError] = useState<string | null>(null);
   const [ytFetching, setYtFetching] = useState(false);
+  const [urlFetching, setUrlFetching] = useState(false);
   const ytFetchedRef = useRef<Set<string>>(new Set());
+  const urlFetchedRef = useRef<Set<string>>(new Set());
   const currentModel = modelOptions.find((m) => m.id === props.modelChoice);
 
   const YT_URL_RE = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/;
@@ -180,6 +182,53 @@ export function Composer(props: ComposerProps) {
           ytFetchedRef.current.delete(videoId);
         })
         .finally(() => setYtFetching(false));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.attachments, props.onAttachmentsChange, props.onChange],
+  );
+
+  const WEB_URL_RE = /https?:\/\/[^\s<>'"]+/;
+
+  const tryFetchWebUrl = useCallback(
+    (text: string) => {
+      if (YT_URL_RE.test(text)) return;
+      const match = text.match(WEB_URL_RE);
+      if (!match) return;
+      const url = match[0];
+      if (urlFetchedRef.current.has(url)) return;
+      if (props.attachments.some((a) => a.name === url)) return;
+
+      urlFetchedRef.current.add(url);
+      setUrlFetching(true);
+      setPickError(null);
+
+      fetch("/api/fetch-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const err = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(err.error ?? "Failed to fetch page");
+          }
+          return res.json() as Promise<{ title: string; text: string; url: string }>;
+        })
+        .then((data) => {
+          const asset: UploadedAsset = {
+            name: `Web: ${data.title}`,
+            type: "text/html",
+            size: data.text.length,
+            extractedText: data.text,
+          };
+          props.onAttachmentsChange([...props.attachments, asset]);
+          props.onChange(text.replace(url, "").trim());
+        })
+        .catch((err) => {
+          setPickError(err instanceof Error ? err.message : "URL fetch failed");
+          urlFetchedRef.current.delete(url);
+        })
+        .finally(() => setUrlFetching(false));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [props.attachments, props.onAttachmentsChange, props.onChange],
@@ -336,7 +385,7 @@ export function Composer(props: ComposerProps) {
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
-      {(props.attachments.length > 0 || parsingCount > 0 || ytFetching) && (
+      {(props.attachments.length > 0 || parsingCount > 0 || ytFetching || urlFetching) && (
         <div className="attachment-row">
           {props.attachments.map((a, i) => (
             <div key={`${a.name}-${i}`} className="attachment-chip">
@@ -377,6 +426,12 @@ export function Composer(props: ComposerProps) {
               <span className="attachment-name">Fetching YouTube transcript…</span>
             </div>
           )}
+          {urlFetching && (
+            <div className="attachment-chip is-parsing" aria-live="polite">
+              <Loader2 size={14} className="spin" />
+              <span className="attachment-name">Fetching web page…</span>
+            </div>
+          )}
         </div>
       )}
       {pickError && (
@@ -392,11 +447,13 @@ export function Composer(props: ComposerProps) {
           const v = e.target.value;
           props.onChange(v);
           tryFetchYouTube(v);
+          tryFetchWebUrl(v);
         }}
         onPaste={(e) => {
           const pasted = e.clipboardData.getData("text");
           if (pasted) {
-            setTimeout(() => tryFetchYouTube(props.value + pasted), 50);
+            const full = props.value + pasted;
+            setTimeout(() => { tryFetchYouTube(full); tryFetchWebUrl(full); }, 50);
           }
         }}
         onKeyDown={handleKeyDown}
