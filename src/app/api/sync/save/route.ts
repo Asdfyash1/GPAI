@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { getTokenFromRequest, verifyToken } from "@/lib/auth";
-import { saveUserData } from "@/lib/telegram";
+import { saveUserData, loadUserData } from "@/lib/telegram";
 
 export async function POST(request: Request) {
   const token = getTokenFromRequest(request);
@@ -14,7 +14,15 @@ export async function POST(request: Request) {
   if (!body.data) return Response.json({ error: "Data is required" }, { status: 400 });
 
   try {
-    await saveUserData(session.emailHash, body.data);
+    const existing = await loadUserData(session.emailHash);
+    const passwordHash = existing?.passwordHash;
+    const profile = existing?.profile;
+
+    const merged: Record<string, unknown> = { ...body.data };
+    if (passwordHash) merged.passwordHash = passwordHash;
+    if (profile && !merged.profile) merged.profile = profile;
+
+    await saveUserData(session.emailHash, merged);
     return Response.json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Save failed";
