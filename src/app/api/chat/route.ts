@@ -1,6 +1,7 @@
 import { streamChatResponse } from "@/lib/orchestrator";
 import { analyzeUploadedImages } from "@/lib/vision";
 import { formatWebContext, searchWeb } from "@/lib/web-search";
+import { requireAuth } from "@/lib/api-guard";
 import type { SearchResult } from "@/lib/web-search";
 import type { ChatRequest, UploadedAsset } from "@/types/education";
 
@@ -10,6 +11,9 @@ export const maxDuration = 60;
 type ChatRequestBody = Partial<ChatRequest>;
 
 export async function POST(request: Request) {
+  const guard = await requireAuth(request);
+  if (!guard.ok) return guard.response;
+
   let body: ChatRequestBody;
   try {
     body = (await request.json()) as ChatRequestBody;

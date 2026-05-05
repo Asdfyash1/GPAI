@@ -5,6 +5,7 @@ import {
   selectedModel,
 } from "@/lib/orchestrator";
 import { generateScientificImage } from "@/lib/image-generation";
+import { requireAuth } from "@/lib/api-guard";
 import type {
   FrameRatio,
   VerificationSignal,
@@ -106,6 +107,9 @@ function extractMermaid(md: string): string | undefined {
 }
 
 export async function POST(request: Request) {
+  const guard = await requireAuth(request);
+  if (!guard.ok) return guard.response;
+
   let body: VisualizeBody;
   try {
     body = (await request.json()) as VisualizeBody;
@@ -191,11 +195,12 @@ export async function POST(request: Request) {
           : "Spec OK but no parseable diagram block.",
       });
     } catch (error) {
+      console.error("[visualize] spec generation failed:", error);
       verification.push({
         model: "Cloud",
         role: "visualizer",
         status: "fallback",
-        notes: error instanceof Error ? error.message : "Spec generation failed.",
+        notes: "Spec generation failed.",
       });
     }
   }
@@ -226,11 +231,12 @@ export async function POST(request: Request) {
           : "Image generation skipped (no key).",
       });
     } catch (error) {
+      console.error("[visualize] image generation failed:", error);
       verification.push({
         model: "Flux 1 Schnell",
         role: "visualizer",
         status: "fallback",
-        notes: error instanceof Error ? error.message : "Image generation failed.",
+        notes: "Image generation failed.",
       });
     }
   }

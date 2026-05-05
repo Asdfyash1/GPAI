@@ -4,6 +4,7 @@ import {
   selectedModel,
 } from "@/lib/orchestrator";
 import { generateText } from "ai";
+import { requireAuth } from "@/lib/api-guard";
 import type { ModelChoice, PracticeItem } from "@/types/education";
 
 export const runtime = "nodejs";
@@ -28,6 +29,9 @@ type QuizResponse =
   | { error: string };
 
 export async function POST(request: Request): Promise<Response> {
+  const guard = await requireAuth(request);
+  if (!guard.ok) return guard.response;
+
   let body: QuizRequest;
   try {
     body = (await request.json()) as QuizRequest;

@@ -1,11 +1,16 @@
-const events: Array<{ event: string; props?: Record<string, unknown>; ts: string }> = [];
+import { requireAuth } from "@/lib/api-guard";
+
+const events: Array<{ event: string; ts: string }> = [];
 
 const MAX_EVENTS = 10_000;
 
 export async function POST(request: Request) {
-  let body: { event?: string; props?: Record<string, unknown> };
+  const guard = await requireAuth(request, { maxRequests: 60 });
+  if (!guard.ok) return guard.response;
+
+  let body: { event?: string };
   try {
-    body = (await request.json()) as { event?: string; props?: Record<string, unknown> };
+    body = (await request.json()) as { event?: string };
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -19,14 +24,16 @@ export async function POST(request: Request) {
   }
 
   events.push({
-    event: body.event,
-    props: body.props,
+    event: body.event.slice(0, 200),
     ts: new Date().toISOString(),
   });
 
   return Response.json({ ok: true });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const guard = await requireAuth(request);
+  if (!guard.ok) return guard.response;
+
   return Response.json({ events: events.slice(-100) });
 }
