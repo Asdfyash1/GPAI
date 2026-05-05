@@ -1,4 +1,5 @@
 import { searchWeb } from "@/lib/web-search";
+import { requireAuth } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -9,6 +10,9 @@ type WebSearchBody = {
 };
 
 export async function POST(request: Request) {
+  const guard = await requireAuth(request);
+  if (!guard.ok) return guard.response;
+
   let body: WebSearchBody;
   try {
     body = (await request.json()) as WebSearchBody;

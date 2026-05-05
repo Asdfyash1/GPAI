@@ -1,3 +1,5 @@
+import { requireAuth } from "@/lib/api-guard";
+
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
@@ -17,7 +19,15 @@ type TranscriptSegment = {
 };
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { url: string };
+  const guard = await requireAuth(request);
+  if (!guard.ok) return guard.response;
+
+  let body: { url: string };
+  try {
+    body = (await request.json()) as { url: string };
+  } catch {
+    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
   if (!body.url) {
     return Response.json({ error: "A YouTube URL is required." }, { status: 400 });
   }

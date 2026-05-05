@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
+import { requireAuth } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -27,7 +28,15 @@ type JudgeResult = {
 };
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { prompt: string; system?: string };
+  const guard = await requireAuth(request, { maxRequests: 10 });
+  if (!guard.ok) return guard.response;
+
+  let body: { prompt: string; system?: string };
+  try {
+    body = (await request.json()) as { prompt: string; system?: string };
+  } catch {
+    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
   if (!body.prompt) {
     return Response.json({ error: "A prompt is required." }, { status: 400 });
   }
@@ -35,8 +44,8 @@ export async function POST(request: Request) {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) {
     return Response.json(
-      { error: "No API key configured." },
-      { status: 500 },
+      { error: "AI service is not available." },
+      { status: 503 },
     );
   }
 
@@ -83,9 +92,9 @@ export async function POST(request: Request) {
       entries.push({
         model: DEBATE_MODELS[i].id,
         label,
-        response: `*Model failed to respond: ${errMsg.slice(0, 200)}*`,
+        response: "*Model failed to respond.*",
         durationMs: Date.now(),
-        error: errMsg,
+        error: "unavailable",
       });
     }
   }
@@ -93,8 +102,9 @@ export async function POST(request: Request) {
   const successEntries = entries.filter((e) => !e.error);
 
   if (successEntries.length === 0) {
+    console.error("[debate] All models failed:", errors);
     return Response.json(
-      { error: `All models failed to respond. Errors: ${errors.map((e) => `${e.label}: ${e.error}`).join("; ")}` },
+      { error: "All models failed to respond. Please try again later." },
       { status: 502 },
     );
   }

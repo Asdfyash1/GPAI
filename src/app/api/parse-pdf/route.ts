@@ -1,9 +1,12 @@
 import { extractText, getDocumentProxy } from "unpdf";
+import { requireAuth } from "@/lib/api-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
+  const guard = await requireAuth(request, { maxBodyBytes: 10 * 1024 * 1024 });
+  if (!guard.ok) return guard.response;
   const contentType = request.headers.get("content-type") ?? "";
   let bytes: Uint8Array;
   let filename = "document.pdf";
