@@ -327,26 +327,28 @@ Theme is toggled via `<html data-theme="dark|light">` with CSS `[data-theme="lig
 
 ## API Routes
 
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/api/auth/signup` | POST | Send OTP email |
-| `/api/auth/login` | POST | Same as signup (returning users) |
-| `/api/auth/verify` | POST | Verify OTP → JWT cookie |
-| `/api/auth/me` | GET | Check session + sliding refresh |
-| `/api/auth/logout` | POST | Clear JWT cookie |
-| `/api/sync/save` | POST | Save user data to cloud |
-| `/api/sync/load` | GET | Load user data from cloud |
-| `/api/share` | POST | Create shareable link |
-| `/api/share/load` | GET | Load shared content by slug |
-| `/api/educate/stream` | POST | Streaming step-by-step solver |
-| `/api/educate` | POST | Non-streaming solver |
-| `/api/chat` | POST | Streaming chat |
-| `/api/quiz` | POST | Generate quiz from problem |
-| `/api/debate` | POST | 4-model debate |
-| `/api/visualize` | POST | Diagram / image generation |
-| `/api/parse-pdf` | POST | PDF text extraction |
-| `/api/web-search` | POST | Web search for chat context |
-| `/api/youtube-transcript` | POST | Fetch YouTube captions |
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/auth/signup` | POST | No | Create account (email + password) |
+| `/api/auth/login` | POST | No | Sign in (returning users) |
+| `/api/auth/verify` | POST | No | Legacy OTP verify (deprecated, returns 410) |
+| `/api/auth/me` | GET | No | Check session + sliding refresh |
+| `/api/auth/logout` | POST | No | Clear JWT cookie |
+| `/api/sync/save` | POST | Yes | Save user data to cloud |
+| `/api/sync/load` | GET | Yes | Load user data from cloud |
+| `/api/share` | POST | Yes | Create shareable link |
+| `/api/share/load` | GET | No | Load shared content by slug |
+| `/api/educate/stream` | POST | Yes | Streaming step-by-step solver |
+| `/api/educate` | POST | Yes | Non-streaming solver |
+| `/api/chat` | POST | Yes | Streaming chat |
+| `/api/quiz` | POST | Yes | Generate quiz from problem |
+| `/api/debate` | POST | Yes | 4-model debate (rate: 10/min) |
+| `/api/visualize` | POST | Yes | Diagram / image generation |
+| `/api/parse-pdf` | POST | Yes | PDF text extraction |
+| `/api/web-search` | POST | Yes | Web search for chat context |
+| `/api/youtube-transcript` | POST | Yes | Fetch YouTube captions |
+| `/api/fetch-url` | POST | Yes | Fetch + extract text from URL |
+| `/api/telemetry` | POST/GET | Yes | Event logging (rate: 60/min) |
 
 All API routes run on Node.js runtime with `maxDuration = 60s` (Vercel Hobby compatible).
 
@@ -359,6 +361,82 @@ All API routes run on Node.js runtime with `maxDuration = 60s` (Vercel Hobby com
 3. Click **Deploy** — no `vercel.json` needed, Next.js 16 + Turbopack auto-detected
 
 PDF parsing uses [`unpdf`](https://www.npmjs.com/package/unpdf) (pure JS, no native binaries). Mermaid diagrams render client-side.
+
+---
+
+## Backend Security
+
+All AI-powered endpoints are **secured by default** — unauthenticated requests from external tools (Colab, Postman, curl) are rejected with `401`.
+
+### Authentication
+
+Every AI endpoint requires a valid JWT session via the `requireAuth()` guard (`src/lib/api-guard.ts`). The guard:
+
+1. Validates the `forge_session` HttpOnly cookie (JWT signed with `JWT_SECRET`)
+2. Returns `401` for missing or expired tokens
+3. Enforces per-user rate limiting (returns `429` when exceeded)
+4. Rejects oversized payloads (returns `413`)
+
+```ts
+// Usage in any API route:
+import { requireAuth } from "@/lib/api-guard";
+
+export async function POST(request: Request) {
+  const guard = await requireAuth(request);
+  if (!guard.ok) return guard.response;
+  // guard.session.email / guard.session.emailHash available
+}
+```
+
+### Rate Limiting
+
+| Endpoint | Limit |
+|----------|-------|
+| Most AI endpoints | 30 requests / 60 seconds per user |
+| `/api/debate` | 10 requests / 60 seconds (4 model calls per request) |
+| `/api/telemetry` | 60 requests / 60 seconds |
+
+In-memory sliding-window counters, per Vercel isolate. Expired buckets are pruned periodically to prevent memory leaks.
+
+### SSRF Protection
+
+`/api/fetch-url` blocks requests to internal/private addresses:
+
+- Loopback: `127.0.0.0/8`, `localhost`, `[::1]`
+- Private: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`
+- Link-local: `169.254.0.0/16`
+- Cloud metadata: `169.254.169.254`, `metadata.google.internal`
+- Local domains: `*.local`, `*.internal`
+
+### Security Headers
+
+Applied globally via `next.config.ts`:
+
+| Header | Value |
+|--------|-------|
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` |
+| `X-Frame-Options` | `DENY` |
+| `X-Content-Type-Options` | `nosniff` |
+| `X-XSS-Protection` | `1; mode=block` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+| `X-Powered-By` | Removed |
+
+API routes additionally get `Cache-Control: no-store, no-cache, must-revalidate`.
+
+### Error Handling
+
+- **No internal details leak to clients** — error responses return generic messages
+- Stack traces, model errors, and API key status are logged server-side only (`console.error`)
+- Telemetry events are truncated to 200 characters; arbitrary properties are stripped
+
+### Public Endpoints
+
+These endpoints intentionally do **not** require authentication:
+
+- `/api/auth/*` — login, signup, session check
+- `/api/share/load` — shared content is viewable without login
+- `/s/[slug]` — public shared content viewer
 
 ---
 
