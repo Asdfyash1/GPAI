@@ -368,14 +368,69 @@ PDF parsing uses [`unpdf`](https://www.npmjs.com/package/unpdf) (pure JS, no nat
 
 All AI-powered endpoints are **secured by default** — unauthenticated requests from external tools (Colab, Postman, curl) are rejected with `401`.
 
+### Architecture — Why Your API Key Is Safe
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  BROWSER (Frontend)                                                 │
+│                                                                     │
+│  User types prompt → fetch("/api/chat", { body: { messages } })     │
+│                      ↑ cookie: forge_session=<JWT> (auto-attached)  │
+│                      ↑ NO API key, NO secret, NO token in code      │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │  Same-origin POST
+                                │  (cookie sent automatically)
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  VERCEL SERVERLESS FUNCTION (Backend)                               │
+│  /api/chat/route.ts                                                 │
+│                                                                     │
+│  1. requireAuth(request)                                            │
+│     ├─ Payload size check ──→ 413 if too large                      │
+│     ├─ Origin validation ───→ 403 if cross-origin POST              │
+│     ├─ JWT cookie verify ───→ 401 if missing/expired                │
+│     └─ Rate limit check ───→ 429 if exceeded                       │
+│                                                                     │
+│  2. process.env.NVIDIA_API_KEY  ← secret, server-side only          │
+│     └─→ Call NVIDIA NIM API with the key                            │
+│                                                                     │
+│  3. Stream response back to browser                                 │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Why this is secure:**
+
+| Attack | Prevention |
+|--------|-----------|
+| Inspect page source → find API key | Impossible — key exists only in Vercel env vars, never sent to browser |
+| Copy API endpoint → call from Colab/curl | `401` — no `forge_session` cookie = rejected |
+| Steal cookie → call from different site | `403` — Origin/Referer validation blocks cross-origin POSTs |
+| Brute-force requests from the app | `429` — per-user rate limiting (30 req/min) |
+| Intercept requests in transit | HTTPS-only (HSTS enforced), cookies are `HttpOnly` + `SameSite=Lax` |
+| XSS tries to read the cookie | Impossible — `HttpOnly` flag means JavaScript cannot access it |
+
+### Why HttpOnly Cookies (Not Bearer Tokens)
+
+The `forge_session` cookie uses `HttpOnly` + `SameSite=Lax` — this is **more secure** than storing tokens in `localStorage`:
+
+| | HttpOnly Cookie | localStorage Token |
+|---|---|---|
+| XSS can steal it | No | **Yes** — any injected script reads it |
+| Sent automatically | Yes (same-origin) | No — must add `Authorization` header manually |
+| CSRF risk | Mitigated by `SameSite=Lax` + Origin validation | Not applicable |
+| Survives page refresh | Yes | Yes |
+| Works with SSR | Yes | No — not available server-side |
+
+**Bottom line:** For a web app on Vercel, `HttpOnly` cookies are the gold standard. Bearer tokens in `localStorage` would be a security downgrade.
+
 ### Authentication
 
-Every AI endpoint requires a valid JWT session via the `requireAuth()` guard (`src/lib/api-guard.ts`). The guard:
+Every AI endpoint requires a valid JWT session via the `requireAuth()` guard (`src/lib/api-guard.ts`). The guard runs 4 security checks in order:
 
-1. Validates the `forge_session` HttpOnly cookie (JWT signed with `JWT_SECRET`)
-2. Returns `401` for missing or expired tokens
-3. Enforces per-user rate limiting (returns `429` when exceeded)
-4. Rejects oversized payloads (returns `413`)
+1. **Payload size** — rejects oversized requests (returns `413`)
+2. **Origin validation (CSRF)** — rejects cross-origin `POST`/`PUT`/`PATCH`/`DELETE` (returns `403`)
+3. **JWT authentication** — validates the `forge_session` HttpOnly cookie signed with `JWT_SECRET` (returns `401`)
+4. **Rate limiting** — enforces per-user request quotas (returns `429`)
 
 ```ts
 // Usage in any API route:
@@ -385,6 +440,50 @@ export async function POST(request: Request) {
   const guard = await requireAuth(request);
   if (!guard.ok) return guard.response;
   // guard.session.email / guard.session.emailHash available
+}
+```
+
+### Frontend Example — How the Browser Calls the API
+
+The frontend calls **only your own backend** — never any external API directly:
+
+```ts
+// This is all the frontend does — a simple same-origin fetch.
+// The HttpOnly cookie is attached automatically by the browser.
+const response = await fetch("/api/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ messages, modelChoice: "auto" }),
+});
+// No API key. No Authorization header. No secrets anywhere in the frontend.
+```
+
+### Backend Example — How the Server Uses the API Key
+
+```ts
+// src/app/api/chat/route.ts (simplified)
+import { requireAuth } from "@/lib/api-guard";
+import { streamChatResponse } from "@/lib/orchestrator";
+
+export async function POST(request: Request) {
+  // 1. Authenticate the user (cookie + CSRF + rate limit)
+  const guard = await requireAuth(request);
+  if (!guard.ok) return guard.response;
+
+  // 2. Parse user input (safe — user is authenticated)
+  const body = await request.json();
+
+  // 3. Call NVIDIA API with server-side key (user never sees this)
+  //    process.env.NVIDIA_API_KEY is a Vercel env var
+  const handle = await streamChatResponse({
+    messages: body.messages,
+    modelChoice: body.modelChoice ?? "auto",
+  });
+
+  // 4. Stream response back to the authenticated user
+  return new Response(handle.textStream, {
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
 ```
 

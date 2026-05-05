@@ -53,6 +53,60 @@ function maybePrune() {
 const MAX_BODY_BYTES = 5 * 1024 * 1024; // 5 MB
 
 // ---------------------------------------------------------------------------
+// Origin validation (CSRF protection)
+//
+// For state-changing requests (POST/PUT/PATCH/DELETE), verify that the
+// Origin or Referer header matches the app's own host. This prevents
+// cross-origin form submissions and fetch() calls from foreign sites
+// even if the attacker somehow has the user's cookie.
+//
+// In development (localhost), all origins are allowed so hot-reload and
+// testing tools work without friction.
+// ---------------------------------------------------------------------------
+
+function isOriginAllowed(request: Request): boolean {
+  const host = request.headers.get("host");
+  if (!host) return false;
+
+  // Skip origin check for safe (read-only) methods
+  const method = request.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return true;
+  }
+
+  // Allow all origins in development
+  if (host.startsWith("localhost") || host.startsWith("127.0.0.1")) {
+    return true;
+  }
+
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+
+  // At least one of Origin or Referer must be present for non-safe requests
+  if (!origin && !referer) return false;
+
+  if (origin) {
+    try {
+      const originHost = new URL(origin).host;
+      return originHost === host;
+    } catch {
+      return false;
+    }
+  }
+
+  if (referer) {
+    try {
+      const refererHost = new URL(referer).host;
+      return refererHost === host;
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Main guard
 // ---------------------------------------------------------------------------
 
@@ -63,7 +117,11 @@ export type GuardResult =
 /**
  * Authenticate + rate-limit a request.
  *
- * Call this at the top of every protected API route handler:
+ * Security layers (checked in order):
+ * 1. Payload size — rejects oversized requests (413)
+ * 2. Origin validation — rejects cross-origin POST/PUT/PATCH/DELETE (403)
+ * 3. JWT authentication — rejects missing/invalid session cookies (401)
+ * 4. Rate limiting — rejects excessive requests per user (429)
  *
  * ```ts
  * const guard = await requireAuth(request);
@@ -90,7 +148,18 @@ export async function requireAuth(
     };
   }
 
-  // 2. Authenticate via JWT cookie
+  // 2. CSRF: validate Origin/Referer for state-changing methods
+  if (!isOriginAllowed(request)) {
+    return {
+      ok: false,
+      response: Response.json(
+        { error: "Cross-origin requests are not allowed." },
+        { status: 403 },
+      ),
+    };
+  }
+
+  // 3. Authenticate via JWT cookie
   const token = getTokenFromRequest(request);
   if (!token) {
     return {
@@ -113,7 +182,7 @@ export async function requireAuth(
     };
   }
 
-  // 3. Per-user rate limiting
+  // 4. Per-user rate limiting
   const rateKey = `api:${session.emailHash}`;
   if (isRateLimited(rateKey, opts?.maxRequests, opts?.windowMs)) {
     return {
